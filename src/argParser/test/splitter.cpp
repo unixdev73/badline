@@ -18,46 +18,26 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include "private/argParser.hpp"
+#include "../private/argParser.hpp"
+#include <iostream>
 
-namespace ap {
-int split(KeyValueT *const pair, std::string const *const input,
-          char const delimiter) {
-  if (!pair)
+int main(int const argc, char const *const *const argv) {
+  if (argc != 4) {
+    std::cerr << "Too few arguments; Usage: <input> <lhs> <rhs>\n";
     return 1;
-  if (!input)
-    return 2;
+  }
 
-  if (!input->size()) {
-    pair->key.clear();
-    pair->value.clear();
+  std::string const input = argv[1];
+  std::string const left = argv[2];
+  std::string const right = argv[3];
+  ap::KeyValueT kv{};
+
+  ap::split(&kv, &input, '=');
+  std::cout << "input: " << input << std::endl;
+  std::cout << "left: " << kv.key << std::endl;
+  std::cout << "right: " << kv.value << std::endl;
+
+  if (kv.key == left && kv.value == right)
     return 0;
-  }
-
-  std::size_t mark = input->find(delimiter);
-  if (mark == std::string::npos) {
-    pair->key = *input;
-    return 3;
-  }
-
-  pair->key = std::string(*input, 0, mark);
-  pair->value = std::string(*input, mark + 1, input->size() - mark - 1);
-  return 0;
+  return 1;
 }
-
-int bind(InputBindingT *const binding, char const *const *const argv,
-         int const begin, int const end) {
-  if (!binding)
-    return 1;
-  if (!argv)
-    return 2;
-  if (begin < 0 || begin >= end)
-    return 3;
-  if (end <= 0)
-    return 4;
-  binding->input = argv;
-  binding->begin = begin;
-  binding->end = end;
-  return 0;
-}
-} // namespace ap
