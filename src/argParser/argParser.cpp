@@ -20,22 +20,46 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/argParser.hpp>
 #include "private/argParser.hpp"
+#include <iostream>
 
-// PUBLIC API IMPLEMENTATION
+#define MCR_LOG(on, msg)                                                       \
+  if (on)                                                                      \
+    std::cerr << "Error: " << __func__ << ": " << msg << std::endl;
+
+#define MCR_ARG(handler)                                                       \
+  {                                                                            \
+    bool skipToken{false};                                                     \
+    auto result = handler(p, tokenPos, &token, nextPtr, &skipToken);           \
+    if (result == Result::Success) {                                           \
+      if (skipToken)                                                           \
+        ++i;                                                                   \
+      continue;                                                                \
+    } else if (result != Result::TokenNotHandled)                              \
+      return result;                                                           \
+  }
+
 namespace ap {
-int createArgParser(ArgParser *const p) {
-  if (auto ptr = new ArgParserT{}; !ptr)
-    return 1;
-  else
-    *p = ptr;
-  return 0;
+int createArgParser(ArgParser *const p, bool debug) {
+  if (!p) {
+    MCR_LOG(debug, "The ArgParser parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
+  }
+
+  *p = new ArgParserT{};
+  if (!*p) {
+    MCR_LOG(debug, "Failed to allocate memory for the ArgParser.");
+    return Result::ErrorMemoryAllocationFailure;
+  }
+
+  (*p)->debug = debug;
+  return Result::Success;
 }
 
 void destroyArgParser(ArgParser const p) { delete p; }
 
-UniqueArgParser createArgParser() {
+UniqueArgParser createArgParser(bool debug) {
   ArgParser p{};
-  createArgParser(&p);
+  createArgParser(&p, debug);
   return UniqueArgParser{p, destroyArgParser};
 }
 
@@ -47,77 +71,93 @@ int addOption(ArgParser const parser, std::string const &l, char const s) {
   return addArg(parser, ArgTypeT::Option, l, s);
 }
 
-int parse(ArgParser const parser, InputBindingT const *const binding) {
-  try {
-    if (!parser)
-      return 1;
-    if (!binding)
-      return 2;
-    if (!binding->input)
-      return 3;
-    if (binding->begin > binding->end)
-      return 4;
-    if (binding->begin == binding->end)
-      return 0;
-
-    for (std::size_t i = binding->begin; i < std::size_t(binding->end); ++i) {
-      std::string const token = binding->input[i];
-      std::string next{}, *nextPtr{nullptr};
-      if (i + 1 < std::size_t(binding->end)) {
-        next = binding->input[i + 1];
-        nextPtr = &next;
-      }
-
-      auto error = handleShortArg(parser, i - binding->begin, &token, nextPtr);
-      if (error == 4)
-        return 5;
-      if (error == 5)
-        ++i;
-      if (!error || error == 5)
-        continue;
-
-      error = handleLongArg(parser, i - binding->begin, &token, nextPtr);
-      if (error == 3)
-        return 5;
-      if (error == 4)
-        ++i;
-      if (!error || error == 4)
-        continue;
-
-      parser->freeValues.push_back(
-          {.position = i - binding->begin, .value = token});
-    }
-  } catch (...) {
-    return 255;
+int validateParseParameters(ArgParser const parser,
+                            InputBinding const *const binding) {
+  if (!parser) {
+    MCR_LOG(parser->debug, "The ArgParser parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
   }
-  return 0;
+
+  if (!binding) {
+    MCR_LOG(parser->debug, "The InputBinding parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
+  }
+
+  if (!binding->input) {
+    MCR_LOG(parser->debug, "The InputBinding input parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
+  }
+
+  if (binding->begin > binding->end) {
+    MCR_LOG(parser->debug, "The InputBinding range begin > end.");
+    return Result::ErrorRangeBeginGreaterThanEnd;
+  }
+  return Result::Success;
 }
 
-int getFlagOccurrence(ArgParser const parser, std::string const &flag,
+int parse(ArgParser const p, InputBinding const *const binding) {
+  if (auto r = validateParseParameters(p, binding); r != Result::Success)
+    return r;
+  if (binding->begin == binding->end)
+    return Result::Success;
+
+  for (std::size_t i = binding->begin; i < std::size_t(binding->end); ++i) {
+    std::size_t const tokenPos = i - binding->begin;
+    std::string const token = binding->input[i];
+    std::string next{}, *nextPtr{nullptr};
+
+    if (i + 1 < std::size_t(binding->end)) {
+      next = binding->input[i + 1];
+      nextPtr = &next;
+    }
+
+    MCR_ARG(handleShortArg);
+    MCR_ARG(handleLongArg);
+
+    p->freeValues.push_back({.position = tokenPos, .value = token});
+  }
+
+  return Result::Success;
+}
+
+int getFlagOccurrence(ArgParser const p, std::string const &flag,
                       std::size_t *count) {
-  if (!parser)
-    return 1;
-  if (!count)
-    return 2;
-  if (parser->flags.longForm.contains(flag))
-    *count = parser->flags.longForm.at(flag).size();
+  if (!p) {
+    MCR_LOG(p->debug, "The ArgParser parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
+  }
+
+  if (!count) {
+    MCR_LOG(p->debug, "The count parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
+  }
+
+  if (p->flags.longForm.contains(flag))
+    *count = p->flags.longForm.at(flag).size();
   else
     *count = 0;
-  return 0;
+
+  return Result::Success;
 }
 
-int getOptionValues(ArgParser const parser, std::string const &opt,
+int getOptionValues(ArgParser const p, std::string const &opt,
                     std::vector<std::string> *const out) {
-  if (!parser)
-    return 1;
-  if (!out)
-    return 2;
-  if (!parser->options.longForm.contains(opt)) {
-    out->clear();
-    return 0;
+  if (!p) {
+    MCR_LOG(p->debug, "The ArgParser parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
   }
 
-  auto &instances = parser->options.longForm.at(opt);
+  if (!out) {
+    MCR_LOG(p->debug, "The out parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
+  }
+
+  if (!p->options.longForm.contains(opt)) {
+    out->clear();
+    return Result::Success;
+  }
+
+  auto &instances = p->options.longForm.at(opt);
   out->resize(instances.size());
   auto it = instances.begin();
   for (std::size_t i = 0; i < instances.size(); ++i) {
@@ -125,27 +165,32 @@ int getOptionValues(ArgParser const parser, std::string const &opt,
     it = std::next(it);
   }
 
-  return 0;
+  return Result::Success;
 }
 
-int getFreeValues(ArgParser const parser, std::vector<std::string> *const out) {
-  if (!parser)
-    return 1;
-  if (!out)
-    return 2;
+int getFreeValues(ArgParser const p, std::vector<std::string> *const out) {
+  if (!p) {
+    MCR_LOG(p->debug, "The ArgParser parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
+  }
 
-  auto &instances = parser->freeValues;
+  if (!out) {
+    MCR_LOG(p->debug, "The out parameter is a nullptr.");
+    return Result::ErrorNullptrParameter;
+  }
+
+  auto &instances = p->freeValues;
   out->resize(instances.size());
   auto it = instances.begin();
   for (std::size_t i = 0; i < instances.size(); ++i) {
     out->at(i) = it->value;
     it = std::next(it);
   }
-  return 0;
+
+  return Result::Success;
 }
 } // namespace ap
 
-// PRIVATE API IMPLEMENTATION
 namespace ap {
 std::pair<std::string, std::string> getArgVal(std::string const &token,
                                               std::size_t const offset) {
@@ -159,200 +204,177 @@ std::pair<std::string, std::string> getArgVal(std::string const &token,
 }
 
 int handleLongArg(ArgParserT *const parser, std::size_t const pos,
-                  std::string const *const id, std::string const *const value) {
-  try {
-    if (!parser)
-      return 1;
-    if (!id)
-      return 2;
-    if (id->size() < parser->longArgPrefix.size() + 1)
-      return 2;
-    if (!id->starts_with(parser->longArgPrefix))
-      return 2;
+                  std::string const *const id, std::string const *const value,
+                  bool *const skipToken) {
+  if (id->size() < parser->longArgPrefix.size() + 1)
+    return Result::TokenNotHandled;
+  if (!id->starts_with(parser->longArgPrefix))
+    return Result::TokenNotHandled;
 
-    auto [key, assignedVal] = getArgVal(*id, parser->longArgPrefix.size());
+  auto [key, assignedVal] = getArgVal(*id, parser->longArgPrefix.size());
 
-    if (parser->flags.longForm.contains(key)) {
-      auto &info = parser->flags.longForm.at(key);
-      info.push_back({.position = pos, .value = ""});
-      return 0;
-    }
-
-    if (parser->options.longForm.contains(key)) {
-      auto &info = parser->options.longForm.at(key);
-      if (assignedVal.empty()) {
-        if (value && value->size()) {
-          info.push_back({.position = pos, .value = *value});
-          return 4;
-        }
-        return 3;
-      }
-      info.push_back({.position = pos, .value = assignedVal});
-      return 0;
-    }
-  } catch (...) {
-    return 255;
+  if (parser->flags.longForm.contains(key)) {
+    auto &info = parser->flags.longForm.at(key);
+    info.push_back({.position = pos, .value = ""});
+    return Result::Success;
   }
-  return 2;
+
+  if (parser->options.longForm.contains(key)) {
+    auto &info = parser->options.longForm.at(key);
+    if (assignedVal.empty()) {
+      if (value && value->size()) {
+        info.push_back({.position = pos, .value = *value});
+        *skipToken = true;
+        return Result::Success;
+      }
+      return Result::ErrorOptionHasNoValue;
+    }
+
+    info.push_back({.position = pos, .value = assignedVal});
+    *skipToken = false;
+    return Result::Success;
+  }
+
+  return Result::TokenNotHandled;
 }
 
 int checkShortArgPreconditions(ArgParserT *const parser,
                                std::string const *const id) {
-  if (!parser)
-    return 1;
   if (!id || id->size() < 2)
-    return 2;
+    return Result::TokenNotHandled;
   if (id->at(0) != parser->shortArgPrefix)
-    return 2;
+    return Result::TokenNotHandled;
   if (id->size() == 2 && !std::isalpha(id->at(1)))
-    return 2;
+    return Result::TokenNotHandled;
   if (id->size() < 4 && id->find('=') != std::string::npos)
-    return 2;
+    return Result::TokenNotHandled;
 
-  return 0;
+  return Result::Success;
 }
 
 int checkArgListPreconditions(ArgParserT *const parser, std::string const &key,
                               std::string const &assignedVal) {
   for (std::size_t i = 0; i < key.size() - 1; ++i) {
     if (!std::isalpha(key[i]))
-      return 2;
+      return Result::TokenNotHandled;
     if (!parser->flags.shortForm.contains(key[i]))
-      return 2;
+      return Result::TokenNotHandled;
   }
 
   if (!parser->flags.shortForm.contains(key.back()) &&
       !parser->options.shortForm.contains(key.back()))
-    return 2;
+    return Result::TokenNotHandled;
 
   if (!assignedVal.empty() && !parser->options.shortForm.contains(key.back()))
-    return 3;
-  return 0;
+    return Result::ErrorFlagAssignedValue;
+  return Result::Success;
 }
 
 int handleShortArg(ArgParserT *const parser, std::size_t const pos,
-                   std::string const *const id,
-                   std::string const *const value) {
-  try {
-    if (auto error = checkShortArgPreconditions(parser, id); error)
-      return error;
+                   std::string const *const id, std::string const *const value,
+                   bool *const skipToken) {
+  if (auto r = checkShortArgPreconditions(parser, id); r != Result::Success)
+    return r;
 
-    auto [key, assignedVal] = getArgVal(*id, 1);
+  auto [key, assignedVal] = getArgVal(*id, 1);
 
-    if (auto error = checkArgListPreconditions(parser, key, assignedVal); error)
-      return error;
+  if (auto r = checkArgListPreconditions(parser, key, assignedVal);
+      r != Result::Success)
+    return r;
 
-    for (std::size_t i = 0; i < key.size(); ++i) {
-      ArgInstanceInfoT *info{};
-      ArgTypeT t{};
+  for (std::size_t i = 0; i < key.size(); ++i) {
+    ArgInstanceInfoT *info{};
+    ArgTypeT t{};
 
-      if (auto e = recognizeAndRegisterArg(parser, key[i], &info, &t); e)
-        continue;
+    recognizeAndRegisterArg(parser, key[i], &info, &t);
+    info->position = pos;
 
-      info->position = pos;
-      if (t != ArgTypeT::Option)
-        continue;
-      if (assignedVal.size()) {
-        info->value = std::move(assignedVal);
-        continue;
-      }
-      if (!value || value->empty()) {
-        parser->options.shortForm.at(key[i])->pop_back();
-        return 4;
-      }
-      info->value = *value;
+    if (t != ArgTypeT::Option)
+      continue;
+    if (assignedVal.size()) {
+      info->value = std::move(assignedVal);
+      continue;
     }
-  } catch (...) {
-    return 255;
+
+    if (!value || value->empty()) {
+      parser->options.shortForm.at(key[i])->pop_back();
+      return Result::ErrorOptionHasNoValue;
+    }
+
+    *skipToken = true;
+    info->value = *value;
   }
-  return 0;
+
+  return Result::Success;
 }
 
 int recognizeAndRegisterArg(ArgParserT *const parser, char const id,
                             ArgInstanceInfoT **info, ArgTypeT *type) {
-  try {
-    if (!parser)
-      return 1;
-    if (!info)
-      return 2;
-    if (!type)
-      return 4;
-
-    if (parser->options.shortForm.contains(id)) {
-      parser->options.shortForm.at(id)->push_back({});
-      *info = &parser->options.shortForm.at(id)->back();
-      *type = ArgTypeT::Option;
-    } else if (parser->flags.shortForm.contains(id)) {
-      parser->flags.shortForm.at(id)->push_back({});
-      *info = &parser->flags.shortForm.at(id)->back();
-      *type = ArgTypeT::Flag;
-    } else
-      return 3;
-  } catch (...) {
-    return 255;
-  }
-
-  return 0;
+  if (parser->options.shortForm.contains(id)) {
+    parser->options.shortForm.at(id)->push_back({});
+    *info = &parser->options.shortForm.at(id)->back();
+    *type = ArgTypeT::Option;
+  } else if (parser->flags.shortForm.contains(id)) {
+    parser->flags.shortForm.at(id)->push_back({});
+    *info = &parser->flags.shortForm.at(id)->back();
+    *type = ArgTypeT::Flag;
+  } else
+    return Result::ErrorIdNotValid;
+  return Result::Success;
 }
 
-int addArg(ArgParserT *const parser, ArgTypeT const type,
-           std::string const &longForm, char const shortForm) noexcept {
-  try {
-    if (!parser)
-      return 1;
-
-    if (longForm.empty())
-      return 2;
-
-    bool const isFlag = (type == ArgTypeT::Flag);
-    auto &larg = isFlag ? parser->flags.longForm : parser->options.longForm;
-    auto &sarg = isFlag ? parser->flags.shortForm : parser->options.shortForm;
-
-    if (larg.contains(longForm))
-      return 3;
-
-    if (shortForm && sarg.contains(shortForm))
-      return 4;
-
-    for (auto const c : longForm)
-      if (!std::isalnum(c))
-        return 5;
-
-    if (!std::isalnum(shortForm))
-      return 6;
-
-    larg.emplace(longForm, std::list<ArgInstanceInfoT>{});
-    if (shortForm)
-      sarg.emplace(shortForm, &larg.at(longForm));
-  } catch (...) {
-    return 255;
+int addArg(ArgParserT *const p, ArgTypeT const type,
+           std::string const &longForm, char const shortForm) {
+  if (longForm.empty()) {
+    MCR_LOG(p->debug, "The long form parameter identifier is empty.");
+    return Result::ErrorEmptyStringParameter;
   }
 
-  return 0;
+  bool const isFlag = (type == ArgTypeT::Flag);
+  auto &larg = isFlag ? p->flags.longForm : p->options.longForm;
+  auto &sarg = isFlag ? p->flags.shortForm : p->options.shortForm;
+
+  if (larg.contains(longForm)) {
+    MCR_LOG(p->debug, "The long form parameter identifier is already taken.");
+    return Result::ErrorIdAlreadyInUse;
+  }
+
+  if (shortForm && sarg.contains(shortForm)) {
+    MCR_LOG(p->debug, "The short form parameter identifier is already taken.");
+    return Result::ErrorIdAlreadyInUse;
+  }
+
+  for (auto const c : longForm)
+    if (!std::isalnum(c)) {
+      MCR_LOG(p->debug, "The parameter long form contains unsupported chars.");
+      return Result::ErrorStringNotValid;
+    }
+
+  if (!std::isalnum(shortForm)) {
+    MCR_LOG(p->debug, "The parameter short form is an unsupported char.");
+    return Result::ErrorCharacterNotValid;
+  }
+
+  larg.emplace(longForm, std::list<ArgInstanceInfoT>{});
+  if (shortForm)
+    sarg.emplace(shortForm, &larg.at(longForm));
+
+  return Result::Success;
 }
 
 int split(KeyValueT *const pair, std::string const *const input,
-          char const delimiter) noexcept {
-  try {
-    if (!pair)
-      return 1;
-    if (!input)
-      return 2;
-    if (!input->size())
-      return 0;
+          char const delimiter) {
+  if (!input->size())
+    return Result::Success;
 
-    std::size_t mark = input->find(delimiter);
-    if (mark == std::string::npos) {
-      pair->key = *input;
-      return 0;
-    }
-
-    pair->key = std::string(*input, 0, mark);
-    pair->value = std::string(*input, mark + 1, input->size() - mark - 1);
-  } catch (...) {
-    return 255;
+  std::size_t mark = input->find(delimiter);
+  if (mark == std::string::npos) {
+    pair->key = *input;
+    return Result::Success;
   }
 
-  return 0;
+  pair->key = std::string(*input, 0, mark);
+  pair->value = std::string(*input, mark + 1, input->size() - mark - 1);
+  return Result::Success;
 }
 } // namespace ap

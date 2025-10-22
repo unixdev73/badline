@@ -23,8 +23,23 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <memory>
 #include <vector>
 
+namespace ap::Result {
+constexpr int Success = 0;
+constexpr int ErrorNullptrParameter = 1;
+constexpr int ErrorMemoryAllocationFailure = 2;
+constexpr int ErrorRangeBeginGreaterThanEnd = 3;
+constexpr int ErrorOptionHasNoValue = 4;
+constexpr int ErrorEmptyStringParameter = 5;
+constexpr int ErrorIdAlreadyInUse = 6;
+constexpr int ErrorStringNotValid = 7;
+constexpr int ErrorCharacterNotValid = 8;
+constexpr int ErrorIdNotValid = 9;
+constexpr int ErrorFlagAssignedValue = 11;
+constexpr int TokenNotHandled = 12;
+} // namespace ap::Result
+
 namespace ap {
-struct InputBindingT {
+struct InputBinding {
   char const *const *input;
   int begin;
   int end;
@@ -34,127 +49,18 @@ struct ArgParserT;
 using ArgParser = ArgParserT *;
 using UniqueArgParser = std::unique_ptr<ArgParserT, void (*)(ArgParser const)>;
 
-/* DESCRIPTION:
- *
- * Creates an arg parser.
- *
- * EXIT STATUS:
- *
- * 0 - The execution was successful.
- *
- * 1 - The creation failed.
- */
-int createArgParser(ArgParser *const);
+int createArgParser(ArgParser *const, bool debug = false);
 void destroyArgParser(ArgParser const);
+UniqueArgParser createArgParser(bool debug = false);
 
-/* DESCRIPTION:
- *
- * Creates an arg parser, and wraps it into a smart pointer.
- * Returns a nullptr if creation fails.
- *
- */
-UniqueArgParser createArgParser();
-
-/* DESCRIPTION:
- *
- * Adds a flag description to the database.
- *
- * EXIT STATUS:
- *
- * 0 - The execution was successful.
- *
- * 1 - The 'parser' argument is a nullptr.
- *
- * 2 - The 'l' argument is not a valid long form.
- *
- * 3 - The 's' argument is not a valid short form.
- *
- * 255 - FATAL_ERROR: OOM or an external API threw. Abandon all hope :(
- */
 int addFlag(ArgParser const parser, std::string const &l, char const s = 0);
-
-/* DESCRIPTION:
- *
- * Adds an option description to the database.
- *
- * EXIT STATUS:
- *
- * 0 - The execution was successful.
- *
- * 1 - The 'parser' argument is a nullptr.
- *
- * 2 - The 'l' argument is not a valid long form.
- *
- * 3 - The 's' argument is not a valid short form.
- *
- * 255 - FATAL_ERROR: OOM or an external API threw. Abandon all hope :(
- */
 int addOption(ArgParser const parser, std::string const &l, char const s = 0);
 
-/* DESCRIPTION:
- *
- * Parses the input, and updates the database structures.
- *
- * EXIT STATUS:
- *
- * 0 - The execution was successful.
- *
- * 1 - The 'parser' argument is a nullptr.
- *
- * 2 - The 'binding' argument is a nullptr.
- *
- * 3 - The 'input' member of the 'binding' argument is a nullptr.
- *
- * 4 - The 'binding' range is not valid. 'begin' > 'end'.
- *
- * 5 - Parsing failed.
- *
- * 255 - FATAL_ERROR: OOM or an external API threw. Abandon all hope :(
- */
-int parse(ArgParser const parser, InputBindingT const *const binding);
+int parse(ArgParser const parser, InputBinding const *const binding);
 
-/* DESCRIPTION:
- *
- * Sets the 'count' argument to the number of occurrences of the 'flag'.
- *
- * EXIT STATUS:
- *
- * 0 - The execution was successful.
- *
- * 1 - The 'parser' argument is a nullptr.
- *
- * 2 - The 'count' argument is a nullptr.
- */
 int getFlagOccurrence(ArgParser const parser, std::string const &flag,
                       std::size_t *count);
-
-/* DESCRIPTION:
- *
- * Fetches the values of the queried option and stores them in the 'out'
- * container.
- *
- * EXIT STATUS:
- *
- * 0 - The execution was successful.
- *
- * 1 - The 'parser' argument is a nullptr.
- *
- * 2 - The 'out' argument is a nullptr.
- */
 int getOptionValues(ArgParser const parser, std::string const &opt,
                     std::vector<std::string> *const out);
-
-/* DESCRIPTION:
- *
- * Fetches free values.
- *
- * EXIT STATUS:
- *
- * 0 - The execution was successful.
- *
- * 1 - The 'parser' argument is a nullptr.
- *
- * 2 - The 'out' argument is a nullptr.
- */
 int getFreeValues(ArgParser const parser, std::vector<std::string> *const out);
 } // namespace ap

@@ -18,48 +18,4 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <badline/argParser.hpp>
-#include <iostream>
-
-int main(int const argc, char const *const *const argv) {
-  ap::InputBindingT b{.input = argv, .begin = 1, .end = argc};
-  auto p = ap::createArgParser();
-
-  ap::addFlag(p.get(), "verbose", 'v');
-  ap::addFlag(p.get(), "help", 'h');
-  ap::addFlag(p.get(), "yes", 'y');
-  ap::addOption(p.get(), "output", 'o');
-
-  auto error = ap::parse(p.get(), &b);
-  if (error) {
-    std::cerr << "Failed to parse the input with error code: " << error
-              << std::endl;
-  }
-
-  auto reportFlag = [ptr = p.get()](std::string const &id) {
-    std::size_t count{};
-    ap::getFlagOccurrence(ptr, id, &count);
-    std::cout << id << " count: " << count << std::endl;
-  };
-
-  auto reportOpt = [ptr = p.get()](std::string const &id) {
-    std::vector<std::string> values{};
-    ap::getOptionValues(ptr, id, &values);
-    std::cout << id << " values: ";
-    for (auto const &v : values)
-      std::cout << v << " ";
-    std::cout << std::endl;
-  };
-
-  reportFlag("verbose");
-  reportFlag("help");
-  reportFlag("yes");
-  reportOpt("output");
-
-  std::vector<std::string> free{};
-  ap::getFreeValues(p.get(), &free);
-
-  for (auto const &v : free)
-    std::cout << "Free val: " << v << std::endl;
-  return 0;
-}
+int main(int const, char const *const *const) { return 0; }
