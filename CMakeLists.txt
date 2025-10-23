@@ -6,5 +6,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 set(CMAKE_CXX_STANDARD_REQUIRED 1)
 set(CMAKE_CXX_STANDARD 20)
 
+set(PROD_TARGETS
+	"argParser"
+	"renderEngine"
+)
+
+include_directories(/usr/local/include)
 include_directories(include)
 add_subdirectory(src)
+add_subdirectory(demo)

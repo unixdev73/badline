@@ -56,7 +56,8 @@ UniqueArgParser createArgParser(bool debug = false);
 int addFlag(ArgParser const parser, std::string const &l, char const s = 0);
 int addOption(ArgParser const parser, std::string const &l, char const s = 0);
 
-int parse(ArgParser const parser, InputBinding const *const binding);
+int parse(ArgParser const parser, InputBinding const *const binding,
+          std::size_t *const errorPosition = nullptr);
 
 int getFlagOccurrence(ArgParser const parser, std::string const &flag,
                       std::size_t *count);

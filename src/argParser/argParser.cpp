@@ -34,8 +34,11 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
       if (skipToken)                                                           \
         ++i;                                                                   \
       continue;                                                                \
-    } else if (result != Result::TokenNotHandled)                              \
+    } else if (result != Result::TokenNotHandled) {                            \
+      if (err)                                                                 \
+        *err = i;                                                              \
       return result;                                                           \
+    }                                                                          \
   }
 
 namespace ap {
@@ -95,7 +98,8 @@ int validateParseParameters(ArgParser const parser,
   return Result::Success;
 }
 
-int parse(ArgParser const p, InputBinding const *const binding) {
+int parse(ArgParser const p, InputBinding const *const binding,
+          std::size_t *err) {
   if (auto r = validateParseParameters(p, binding); r != Result::Success)
     return r;
   if (binding->begin == binding->end)
@@ -153,6 +157,11 @@ int getOptionValues(ArgParser const p, std::string const &opt,
   }
 
   if (!p->options.longForm.contains(opt)) {
+    MCR_LOG(p->debug, "The id: '" + opt + "' is not a valid option.");
+    return Result::ErrorIdNotValid;
+  }
+
+  if (!p->options.longForm.at(opt).size()) {
     out->clear();
     return Result::Success;
   }
