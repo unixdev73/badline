@@ -18,22 +18,17 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include "parseCLI.hpp"
-#include <badline/renderEngine.hpp>
+#pragma once
 
-int main(int const argc, char const *const *const argv) {
-  ap::InputBinding binding{.input = argv, .begin = 1, .end = argc};
-  demo::AppCLI data{};
+#include <badline/argParser.hpp>
+#include <cstdint>
 
-  if (auto error = demo::parseCLI(&data, &binding); error)
-    return 1;
+namespace demo {
+struct AppCLI {
+  uint32_t width{1280};
+  uint32_t height{720};
+  bool debug{false};
+};
 
-  auto engine = re::createRenderEngine("Demo", data.debug);
-  if (!engine)
-    return 2;
-
-  if (auto err = re::createWindow(engine.get(), data.width, data.height); err)
-    return 3;
-
-  return re::run(engine.get());
-}
+int parseCLI(AppCLI *const data, ap::InputBinding *const binding);
+} // namespace demo

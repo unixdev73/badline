@@ -35,18 +35,43 @@ using UniqueWindow = std::unique_ptr<GLFWwindow, void (*)(GLFWwindow *const)>;
 using UniqueSurface =
     std::unique_ptr<VkSurfaceKHR_T, std::function<void(VkSurfaceKHR_T *const)>>;
 
-struct RenderEngineT {
-  UniqueInstance instance{nullptr, nullptr};
+using UniqueSwapchain =
+    std::unique_ptr<VkSwapchainKHR_T,
+                    std::function<void(VkSwapchainKHR_T *const)>>;
+
+struct InstanceT {
+  UniqueInstance handle{nullptr, nullptr};
   std::string title{};
   bool debug{false};
+};
 
-  VkPhysicalDevice physicalDev{VK_NULL_HANDLE};
-  UniqueDevice device{nullptr, nullptr};
+struct DeviceT {
+  VkPhysicalDevice identifier{VK_NULL_HANDLE};
+  UniqueDevice handle{nullptr, nullptr};
+  VkQueue presentation{VK_NULL_HANDLE};
   VkQueue graphics{VK_NULL_HANDLE};
-  VkQueue present{VK_NULL_HANDLE};
+};
 
-  UniqueWindow window{nullptr, nullptr};
+struct WindowT {
+  UniqueWindow handle{nullptr, nullptr};
+  uint32_t width{}, height{};
+
   UniqueSurface surface{nullptr, nullptr};
+  std::vector<VkSurfaceFormatKHR> surfaceFormats{};
+  VkSurfaceFormatKHR surfaceFormat{};
+  VkSurfaceCapabilitiesKHR surfaceCaps{};
+
+  VkPresentModeKHR presentMode{VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR};
+  std::vector<VkPresentModeKHR> presentModes{};
+
+  UniqueSwapchain swapchain{nullptr, nullptr};
+  std::vector<VkImage> swapImages{};
+};
+
+struct RenderEngineT {
+  InstanceT instance{};
+  DeviceT device{};
+  WindowT window{};
 };
 
 int createVulkanInstance(std::string const &appName, bool validate,
@@ -55,4 +80,6 @@ int createVulkanInstance(std::string const &appName, bool validate,
 int selectOptimalGPU(VkInstance const instance, bool const dbg,
                      VkPhysicalDevice *phy, VkDevice *dev, VkQueue *present,
                      VkQueue *graphics);
+
+int createWindow(RenderEngineT *const engine, uint32_t width, uint32_t height);
 } // namespace re
