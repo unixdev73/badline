@@ -298,7 +298,7 @@ int createVulkanInstance(std::string const &appName, bool debug,
   VkApplicationInfo app{};
   app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   app.pApplicationName = appName.c_str();
-  app.apiVersion = VK_API_VERSION_1_4;
+  app.apiVersion = VK_API_VERSION_1_3;
   info.pApplicationInfo = &app;
 
   info.ppEnabledExtensionNames =

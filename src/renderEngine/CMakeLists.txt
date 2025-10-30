@@ -1,4 +1,4 @@
-find_package(Vulkan 1.4 COMPONENTS glslangValidator REQUIRED)
+find_package(Vulkan 1.3 COMPONENTS glslangValidator REQUIRED)
 find_library(GLFW glfw NAMES glfw3 REQUIRED)
 find_package(glm REQUIRED)
 
