@@ -20,9 +20,10 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <unordered_map>
-#include <string>
 #include <list>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace ap {
 struct KeyValueT {
@@ -55,11 +56,13 @@ struct ArgParserT {
 
 namespace ap {
 int handleLongArg(ArgParserT *const parser, std::size_t const pos,
-                  std::string const *const id, std::string const *const value,
+                  std::string const *const id,
+                  std::vector<char const *> const *const tokens,
                   bool *const skipToken);
 
 int handleShortArg(ArgParserT *const parser, std::size_t const pos,
-                   std::string const *const id, std::string const *const value,
+                   std::string const *const id,
+                   std::vector<char const *> const *const tokens,
                    bool *const skipToken);
 
 int recognizeAndRegisterArg(ArgParserT *const parser, char const id,

@@ -18,8 +18,8 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <badline/argParser.hpp>
 #include "private/argParser.hpp"
+#include <badline/argParser.hpp>
 #include <iostream>
 
 #define MCR_LOG(on, msg)                                                       \
@@ -29,7 +29,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #define MCR_ARG(handler)                                                       \
   {                                                                            \
     bool skipToken{false};                                                     \
-    auto result = handler(p, tokenPos, &token, nextPtr, &skipToken);           \
+    auto result = handler(p, tokenPos, &token, &tokens, &skipToken);           \
     if (result == Result::Success) {                                           \
       if (skipToken)                                                           \
         ++i;                                                                   \
@@ -98,6 +98,21 @@ int validateParseParameters(ArgParser const parser,
   return Result::Success;
 }
 
+std::vector<char const *> lookAhead(char const *const *input,
+                                    std::size_t const inputSz, std::size_t i,
+                                    std::size_t const n) {
+  std::vector<char const *> tokens;
+  std::size_t counter{};
+
+  tokens.reserve(n);
+
+  for (++i; i < inputSz && counter < n; ++i, ++counter) {
+    tokens.push_back(input[i]);
+  }
+
+  return tokens;
+}
+
 int parse(ArgParser const p, InputBinding const *const binding,
           std::size_t *err) {
   if (auto r = validateParseParameters(p, binding); r != Result::Success)
@@ -106,17 +121,12 @@ int parse(ArgParser const p, InputBinding const *const binding,
     return Result::Success;
 
   for (std::size_t i = binding->begin; i < std::size_t(binding->end); ++i) {
+    auto const tokens = lookAhead(binding->input, binding->end, i, 1);
     std::size_t const tokenPos = i - binding->begin;
     std::string const token = binding->input[i];
-    std::string next{}, *nextPtr{nullptr};
-
-    if (i + 1 < std::size_t(binding->end)) {
-      next = binding->input[i + 1];
-      nextPtr = &next;
-    }
 
     MCR_ARG(handleShortArg);
-    MCR_ARG(handleLongArg);
+    // MCR_ARG(handleLongArg);
 
     p->freeValues.push_back({.position = tokenPos, .value = token});
   }
@@ -213,7 +223,8 @@ std::pair<std::string, std::string> getArgVal(std::string const &token,
 }
 
 int handleLongArg(ArgParserT *const parser, std::size_t const pos,
-                  std::string const *const id, std::string const *const value,
+                  std::string const *const id,
+                  std::vector<char const *> const *const tokens,
                   bool *const skipToken) {
   if (id->size() < parser->longArgPrefix.size() + 1)
     return Result::TokenNotHandled;
@@ -231,8 +242,8 @@ int handleLongArg(ArgParserT *const parser, std::size_t const pos,
   if (parser->options.longForm.contains(key)) {
     auto &info = parser->options.longForm.at(key);
     if (assignedVal.empty()) {
-      if (value && value->size()) {
-        info.push_back({.position = pos, .value = *value});
+      if (tokens && tokens->size()) {
+        info.push_back({.position = pos, .value = tokens->front()});
         *skipToken = true;
         return Result::Success;
       }
@@ -280,7 +291,8 @@ int checkArgListPreconditions(ArgParserT *const parser, std::string const &key,
 }
 
 int handleShortArg(ArgParserT *const parser, std::size_t const pos,
-                   std::string const *const id, std::string const *const value,
+                   std::string const *const id,
+                   std::vector<char const *> const *const tokens,
                    bool *const skipToken) {
   if (auto r = checkShortArgPreconditions(parser, id); r != Result::Success)
     return r;
@@ -305,13 +317,13 @@ int handleShortArg(ArgParserT *const parser, std::size_t const pos,
       continue;
     }
 
-    if (!value || value->empty()) {
+    if (!tokens || tokens->empty()) {
       parser->options.shortForm.at(key[i])->pop_back();
       return Result::ErrorOptionHasNoValue;
     }
 
     *skipToken = true;
-    info->value = *value;
+    info->value = tokens->front();
   }
 
   return Result::Success;
