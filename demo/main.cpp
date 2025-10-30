@@ -20,20 +20,27 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "parseCLI.hpp"
 #include <badline/renderEngine.hpp>
+#include <iostream>
 
 int main(int const argc, char const *const *const argv) {
-  ap::InputBinding binding{.input = argv, .begin = 1, .end = argc};
-  demo::AppCLI data{};
+  try {
+    ap::InputBinding binding{.input = argv, .begin = 1, .end = argc};
+    demo::AppCLI data{};
 
-  if (auto error = demo::parseCLI(&data, &binding); error)
-    return 1;
+    if (auto error = demo::parseCLI(&data, &binding); error)
+      return 1;
 
-  auto engine = re::createRenderEngine("Demo", data.debug);
-  if (!engine)
-    return 2;
+    auto engine = re::createRenderEngine("Demo", data.debug);
+    if (!engine)
+      return 2;
 
-  if (auto err = re::createWindow(engine.get(), data.width, data.height); err)
-    return 3;
+    if (auto err = re::createWindow(engine.get(), data.width, data.height); err)
+      return 3;
 
-  return re::run(engine.get());
+    return re::run(engine.get());
+  } catch (std::exception const &e) {
+    std::cerr << "Error: Caught exception: " << e.what() << std::endl;
+  } catch (...) {
+    std::cerr << "Error: Caught unknown exception." << std::endl;
+  }
 }

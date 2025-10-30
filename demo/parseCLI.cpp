@@ -78,7 +78,7 @@ int readStr(ap::UniqueArgParser &p, std::string const &opt, std::string *out) {
 
     if (auto error = ap::getOptionValues(p.get(), opt, &vals); error) {
       std::string const err = std::to_string(error);
-      MCR_ERR("Failed to get option values with error code: " + err, error);
+      return 1;
     }
 
     if (!vals.size())
@@ -86,7 +86,7 @@ int readStr(ap::UniqueArgParser &p, std::string const &opt, std::string *out) {
 
     *out = vals.front();
   } catch (...) {
-    MCR_ERR("Failed to read " + opt + " option value.", -1);
+    MCR_ERR("Failed to read " + opt + " option value.", 2);
   }
 
   return 0;
@@ -97,7 +97,7 @@ int readUint32(ap::UniqueArgParser &p, std::string const &opt, uint32_t *out) {
   try {
     if (auto error = readStr(p, opt, &tmp); error) {
       std::string const err = std::to_string(error);
-      MCR_ERR("Failed to get option values with error code: " + err, 1);
+      return 1;
     }
 
     if (tmp.empty())
@@ -115,7 +115,7 @@ int readValues(ap::UniqueArgParser &p, ArgDatabaseT *db) {
   for (auto const &[id, info] : db->flags) {
     std::size_t count{};
     if (auto error = ap::getFlagOccurrence(p.get(), id, &count); error)
-      MCR_ERR("Failed to get flag occurrence: " + id, 1);
+      return 1;
     *info.value = static_cast<bool>(count);
   }
 
@@ -141,20 +141,18 @@ int parseCLI(AppCLI *const data, ap::InputBinding *const binding) {
   ArgDatabaseT db{};
   populateDatabase(p, &db, data);
 
+  std::vector<std::string> fv{};
   std::size_t errPos{};
   if (auto error = ap::parse(p.get(), binding, &errPos); error) {
-    std::vector<std::string> fv{};
-
     if (error == ap::Result::ErrorOptionHasNoValue) {
       std::string const option = binding->input[errPos];
       MCR_ERR("The option: '" + option + "' requires a value.", 3);
     }
 
-    if (ap::getFreeValues(p.get(), &fv); fv.size())
-      MCR_ERR("Free values are not allowed: '" + fv.front() + "'", 4);
-
     MCR_ERR("Failed with error code: " + std::to_string(error), 5);
   }
+  if (ap::getFreeValues(p.get(), &fv); fv.size())
+    MCR_ERR("Free values are not allowed: '" + fv.front() + "'", 4);
 
   if (auto error = readValues(p, &db); error)
     return 6;

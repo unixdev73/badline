@@ -20,7 +20,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/renderEngine.hpp>
 #include "private/renderEngine.hpp"
-#include "vulkan/vulkan_core.h"
 #include <iostream>
 #include <string>
 
