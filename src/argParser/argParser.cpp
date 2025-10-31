@@ -126,7 +126,7 @@ int parse(ArgParser const p, InputBinding const *const binding,
     std::string const token = binding->input[i];
 
     MCR_ARG(handleShortArg);
-    // MCR_ARG(handleLongArg);
+    MCR_ARG(handleLongArg);
 
     p->freeValues.push_back({.position = tokenPos, .value = token});
   }
