@@ -1,4 +1,4 @@
-add_executable(testSplitter splitter.cpp)
+add_executable(testSplitter testSplitter.cpp)
 target_link_libraries(testSplitter argParser)
 
 add_test(NAME splitTest0001 COMMAND testSplitter "--username=test" "--username" "test")

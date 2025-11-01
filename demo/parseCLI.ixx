@@ -18,12 +18,14 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#pragma once
+module;
 
-#include <badline/argParser.hpp>
 #include <cstdint>
 
-namespace demo {
+export module DemoParseCLI;
+import ArgParser;
+
+export namespace demo {
 struct AppCLI {
   uint32_t width{1280};
   uint32_t height{720};

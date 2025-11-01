@@ -18,28 +18,15 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include "private/argParser.hpp"
-#include <badline/argParser.hpp>
+module;
+
 #include <iostream>
+
+module ArgParser;
 
 #define MCR_LOG(on, msg)                                                       \
   if (on)                                                                      \
     std::cerr << "Error: " << __func__ << ": " << msg << std::endl;
-
-#define MCR_ARG(handler)                                                       \
-  {                                                                            \
-    bool skipToken{false};                                                     \
-    auto result = handler(p, tokenPos, &token, &tokens, &skipToken);           \
-    if (result == Result::Success) {                                           \
-      if (skipToken)                                                           \
-        ++i;                                                                   \
-      continue;                                                                \
-    } else if (result != Result::TokenNotHandled) {                            \
-      if (err)                                                                 \
-        *err = i;                                                              \
-      return result;                                                           \
-    }                                                                          \
-  }
 
 namespace ap {
 int createArgParser(ArgParser *const p, bool debug) {
@@ -124,9 +111,29 @@ int parse(ArgParser const p, InputBinding const *const binding,
     auto const tokens = lookAhead(binding->input, binding->end, i, 1);
     std::size_t const tokenPos = i - binding->begin;
     std::string const token = binding->input[i];
+    bool skipToken{false};
 
-    MCR_ARG(handleShortArg);
-    MCR_ARG(handleLongArg);
+    auto result = handleShortArg(p, tokenPos, &token, &tokens, &skipToken);
+    if (result == Result::Success) {
+      if (skipToken)
+        ++i;
+      continue;
+    } else if (result != Result::TokenNotHandled) {
+      if (err)
+        *err = i;
+      return result;
+    }
+
+    result = handleLongArg(p, tokenPos, &token, &tokens, &skipToken);
+    if (result == Result::Success) {
+      if (skipToken)
+        ++i;
+      continue;
+    } else if (result != Result::TokenNotHandled) {
+      if (err)
+        *err = i;
+      return result;
+    }
 
     p->freeValues.push_back({.position = tokenPos, .value = token});
   }
@@ -397,5 +404,26 @@ int split(KeyValueT *const pair, std::string const *const input,
   pair->key = std::string(*input, 0, mark);
   pair->value = std::string(*input, mark + 1, input->size() - mark - 1);
   return Result::Success;
+}
+
+int splitTest(int const argc, char const *const *const argv) {
+  if (argc != 4) {
+    std::cerr << "Too few arguments; Usage: <input> <lhs> <rhs>\n";
+    return 1;
+  }
+
+  std::string const input = argv[1];
+  std::string const left = argv[2];
+  std::string const right = argv[3];
+  ap::KeyValueT kv{};
+
+  ap::split(&kv, &input, '=');
+  std::cout << "input: " << input << std::endl;
+  std::cout << "left: " << kv.key << std::endl;
+  std::cout << "right: " << kv.value << std::endl;
+
+  if (kv.key == left && kv.value == right)
+    return 0;
+  return 1;
 }
 } // namespace ap
