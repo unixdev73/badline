@@ -11,7 +11,7 @@
       "name": "dev",
       "displayName": "Development",
       "description": "Development build including tests",
-      "generator": "Unix Makefiles",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
 
       "cacheVariables": {
