@@ -18,9 +18,3 @@ if (BUILD_TEST_TARGETS)
 		add_subdirectory(${module}/test)
 	endforeach()
 endif()
-
-add_executable(run main.cpp)
-
-foreach(module IN LISTS PROD_TARGETS)
-	target_link_libraries(run ${module})
-endforeach()
