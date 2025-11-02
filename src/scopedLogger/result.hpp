@@ -18,40 +18,10 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <badline/renderEngine.hpp>
-#include <iostream>
+#pragma once
 
-import DemoParseCLI;
-import ArgParser;
-import ScopedLogger;
-
-using sl::inf;
-
-int main(int const argc, char const *const *const argv) {
-  try {
-    ap::InputBinding binding{.input = argv, .begin = 1, .end = argc};
-    auto logger = sl::createLogger(__func__);
-    auto const l = logger.get();
-    demo::AppCLI data{};
-
-    inf(l, "Parsing CLI");
-    if (auto error = demo::parseCLI(&data, &binding); error)
-      return 1;
-
-    inf(l, "Creating render engine");
-    auto engine = re::createRenderEngine("Demo", data.debug);
-    if (!engine)
-      return 2;
-
-    inf(l, "Creating window");
-    if (auto err = re::createWindow(engine.get(), data.width, data.height); err)
-      return 3;
-
-    inf(l, "Running main loop");
-    return re::run(engine.get());
-  } catch (std::exception const &e) {
-    std::cerr << "Error: Caught exception: " << e.what() << std::endl;
-  } catch (...) {
-    std::cerr << "Error: Caught unknown exception." << std::endl;
-  }
-}
+namespace sl::Result {
+constexpr int Success = 0;
+constexpr int ErrorMemoryAllocationFailure = 1;
+constexpr int ErrorNullptrParameter = 2;
+}; // namespace sl::Result
