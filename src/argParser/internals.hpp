@@ -23,6 +23,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <unordered_map>
 #include <string>
 #include <list>
+#include <vector>
 
 namespace sl {
 struct LoggerT;
