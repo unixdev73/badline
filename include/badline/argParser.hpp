@@ -23,6 +23,10 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <vector>
 #include <string>
 
+namespace sl {
+struct LoggerT;
+}
+
 namespace ap {
 struct ArgParserT;
 
@@ -41,24 +45,29 @@ constexpr int ErrorFlagAssignedValue = 11;
 constexpr int TokenNotHandled = 12;
 } // namespace Result
 
-int createArgParser(ArgParserT **const, bool debug = false);
+int createArgParser(ArgParserT **const, bool debug = false,
+                    sl::LoggerT *const = nullptr);
 
 void destroyArgParser(ArgParserT *const);
 
-int addFlag(ArgParserT *const parser, std::string const &l, char const s = 0);
+int addFlag(ArgParserT *const parser, std::string const &l, char const s = 0,
+            sl::LoggerT *const = nullptr);
 
-int addOption(ArgParserT *const parser, std::string const &l, char const s = 0);
+int addOption(ArgParserT *const parser, std::string const &l, char const s = 0,
+              sl::LoggerT *const = nullptr);
 
 int parse(ArgParserT *const parser, char const *const *const input,
           std::size_t const begin, std::size_t const end,
-          std::size_t *const errorPosition = nullptr);
+          std::size_t *const errorPosition = nullptr,
+          sl::LoggerT *const = nullptr);
 
 int getFlagOccurrence(ArgParserT *const parser, std::string const &flag,
-                      std::size_t *count);
+                      std::size_t *count, sl::LoggerT *const = nullptr);
 
 int getOptionValues(ArgParserT *const parser, std::string const &opt,
-                    std::vector<std::string> *const out);
+                    std::vector<std::string> *const out,
+                    sl::LoggerT *const = nullptr);
 
-int getFreeValues(ArgParserT *const parser,
-                  std::vector<std::string> *const out);
-}
+int getFreeValues(ArgParserT *const parser, std::vector<std::string> *const out,
+                  sl::LoggerT *const = nullptr);
+} // namespace ap

@@ -1,5 +1,5 @@
 add_executable(testSplitter testSplitter.cpp)
-target_link_libraries(testSplitter argParserInternals)
+target_link_libraries(testSplitter argParser)
 
 add_test(NAME splitTest0001 COMMAND testSplitter "--username=test" "--username" "test")
 add_test(NAME splitTest0002 COMMAND testSplitter "=" "" "")

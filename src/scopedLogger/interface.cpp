@@ -186,7 +186,8 @@ UniqueLogger createLogger(std::string const &func) {
 
 FunctionScope::FunctionScope(LoggerT *const logger, std::string const &func) {
   logger_ = logger;
-  stepIn(logger_, func);
+  if (logger_)
+    stepIn(logger_, func);
 }
 
 FunctionScope::FunctionScope(FunctionScope &&o) {
