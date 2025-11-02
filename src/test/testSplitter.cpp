@@ -38,8 +38,26 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
  * 1 - The LHS or RHS don't match the expectations.
  */
 
-import ArgParser;
+#include <argParser/internals.hpp>
+#include <iostream>
 
 int main(int const argc, char const *const *const argv) {
-  return ap::splitTest(argc, argv);
+  if (argc != 4) {
+    std::cerr << "Too few arguments; Usage: <input> <lhs> <rhs>\n";
+    return 1;
+  }
+
+  std::string const input = argv[1];
+  std::string const left = argv[2];
+  std::string const right = argv[3];
+  ap::KeyValueT kv{};
+
+  ap::split(&kv, &input, '=');
+  std::cout << "input: " << input << std::endl;
+  std::cout << "left: " << kv.key << std::endl;
+  std::cout << "right: " << kv.value << std::endl;
+
+  if (kv.key == left && kv.value == right)
+    return 0;
+  return 1;
 }

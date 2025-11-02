@@ -18,67 +18,29 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-module;
-
+#include <badline/argParser.hpp>
+#include "internals.hpp"
 #include <iostream>
-
-module ArgParser;
 
 #define MCR_LOG(on, msg)                                                       \
   if (on)                                                                      \
     std::cerr << "Error: " << __func__ << ": " << msg << std::endl;
 
 namespace ap {
-int createArgParser(ArgParser *const p, bool debug) {
-  if (!p) {
-    MCR_LOG(debug, "The ArgParser parameter is a nullptr.");
-    return Result::ErrorNullptrParameter;
-  }
-
-  *p = new ArgParserT{};
-  if (!*p) {
-    MCR_LOG(debug, "Failed to allocate memory for the ArgParser.");
-    return Result::ErrorMemoryAllocationFailure;
-  }
-
-  (*p)->debug = debug;
-  return Result::Success;
-}
-
-void destroyArgParser(ArgParser const p) { delete p; }
-
-UniqueArgParser createArgParser(bool debug) {
-  ArgParser p{};
-  createArgParser(&p, debug);
-  return UniqueArgParser{p, destroyArgParser};
-}
-
-int addFlag(ArgParser const parser, std::string const &l, char const s) {
-  return addArg(parser, ArgTypeT::Flag, l, s);
-}
-
-int addOption(ArgParser const parser, std::string const &l, char const s) {
-  return addArg(parser, ArgTypeT::Option, l, s);
-}
-
-int validateParseParameters(ArgParser const parser,
-                            InputBinding const *const binding) {
+int validateParseParameters(ArgParserT *const parser,
+                            char const *const *const input,
+                            std::size_t const begin, std::size_t end) {
   if (!parser) {
     MCR_LOG(parser->debug, "The ArgParser parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
-  if (!binding) {
-    MCR_LOG(parser->debug, "The InputBinding parameter is a nullptr.");
-    return Result::ErrorNullptrParameter;
-  }
-
-  if (!binding->input) {
+  if (!input) {
     MCR_LOG(parser->debug, "The InputBinding input parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
-  if (binding->begin > binding->end) {
+  if (begin > end) {
     MCR_LOG(parser->debug, "The InputBinding range begin > end.");
     return Result::ErrorRangeBeginGreaterThanEnd;
   }
@@ -100,124 +62,6 @@ std::vector<char const *> lookAhead(char const *const *input,
   return tokens;
 }
 
-int parse(ArgParser const p, InputBinding const *const binding,
-          std::size_t *err) {
-  if (auto r = validateParseParameters(p, binding); r != Result::Success)
-    return r;
-  if (binding->begin == binding->end)
-    return Result::Success;
-
-  for (std::size_t i = binding->begin; i < std::size_t(binding->end); ++i) {
-    auto const tokens = lookAhead(binding->input, binding->end, i, 1);
-    std::size_t const tokenPos = i - binding->begin;
-    std::string const token = binding->input[i];
-    bool skipToken{false};
-
-    auto result = handleShortArg(p, tokenPos, &token, &tokens, &skipToken);
-    if (result == Result::Success) {
-      if (skipToken)
-        ++i;
-      continue;
-    } else if (result != Result::TokenNotHandled) {
-      if (err)
-        *err = i;
-      return result;
-    }
-
-    result = handleLongArg(p, tokenPos, &token, &tokens, &skipToken);
-    if (result == Result::Success) {
-      if (skipToken)
-        ++i;
-      continue;
-    } else if (result != Result::TokenNotHandled) {
-      if (err)
-        *err = i;
-      return result;
-    }
-
-    p->freeValues.push_back({.position = tokenPos, .value = token});
-  }
-
-  return Result::Success;
-}
-
-int getFlagOccurrence(ArgParser const p, std::string const &flag,
-                      std::size_t *count) {
-  if (!p) {
-    MCR_LOG(p->debug, "The ArgParser parameter is a nullptr.");
-    return Result::ErrorNullptrParameter;
-  }
-
-  if (!count) {
-    MCR_LOG(p->debug, "The count parameter is a nullptr.");
-    return Result::ErrorNullptrParameter;
-  }
-
-  if (p->flags.longForm.contains(flag))
-    *count = p->flags.longForm.at(flag).size();
-  else
-    *count = 0;
-
-  return Result::Success;
-}
-
-int getOptionValues(ArgParser const p, std::string const &opt,
-                    std::vector<std::string> *const out) {
-  if (!p) {
-    MCR_LOG(p->debug, "The ArgParser parameter is a nullptr.");
-    return Result::ErrorNullptrParameter;
-  }
-
-  if (!out) {
-    MCR_LOG(p->debug, "The out parameter is a nullptr.");
-    return Result::ErrorNullptrParameter;
-  }
-
-  if (!p->options.longForm.contains(opt)) {
-    MCR_LOG(p->debug, "The id: '" + opt + "' is not a valid option.");
-    return Result::ErrorIdNotValid;
-  }
-
-  if (!p->options.longForm.at(opt).size()) {
-    out->clear();
-    return Result::Success;
-  }
-
-  auto &instances = p->options.longForm.at(opt);
-  out->resize(instances.size());
-  auto it = instances.begin();
-  for (std::size_t i = 0; i < instances.size(); ++i) {
-    out->at(i) = it->value;
-    it = std::next(it);
-  }
-
-  return Result::Success;
-}
-
-int getFreeValues(ArgParser const p, std::vector<std::string> *const out) {
-  if (!p) {
-    MCR_LOG(p->debug, "The ArgParser parameter is a nullptr.");
-    return Result::ErrorNullptrParameter;
-  }
-
-  if (!out) {
-    MCR_LOG(p->debug, "The out parameter is a nullptr.");
-    return Result::ErrorNullptrParameter;
-  }
-
-  auto &instances = p->freeValues;
-  out->resize(instances.size());
-  auto it = instances.begin();
-  for (std::size_t i = 0; i < instances.size(); ++i) {
-    out->at(i) = it->value;
-    it = std::next(it);
-  }
-
-  return Result::Success;
-}
-} // namespace ap
-
-namespace ap {
 std::pair<std::string, std::string> getArgVal(std::string const &token,
                                               std::size_t const offset) {
   std::string argPart(token, offset, token.size() - offset);
@@ -405,25 +249,4 @@ int split(KeyValueT *const pair, std::string const *const input,
   pair->value = std::string(*input, mark + 1, input->size() - mark - 1);
   return Result::Success;
 }
-
-int splitTest(int const argc, char const *const *const argv) {
-  if (argc != 4) {
-    std::cerr << "Too few arguments; Usage: <input> <lhs> <rhs>\n";
-    return 1;
-  }
-
-  std::string const input = argv[1];
-  std::string const left = argv[2];
-  std::string const right = argv[3];
-  ap::KeyValueT kv{};
-
-  ap::split(&kv, &input, '=');
-  std::cout << "input: " << input << std::endl;
-  std::cout << "left: " << kv.key << std::endl;
-  std::cout << "right: " << kv.value << std::endl;
-
-  if (kv.key == left && kv.value == right)
-    return 0;
-  return 1;
 }
-} // namespace ap

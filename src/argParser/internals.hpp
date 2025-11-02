@@ -18,61 +18,11 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-module;
+#pragma once
 
 #include <unordered_map>
-#include <memory>
-#include <vector>
 #include <string>
-#include <vector>
 #include <list>
-
-export module ArgParser;
-
-export namespace ap {
-namespace Result {
-constexpr int Success = 0;
-constexpr int ErrorNullptrParameter = 1;
-constexpr int ErrorMemoryAllocationFailure = 2;
-constexpr int ErrorRangeBeginGreaterThanEnd = 3;
-constexpr int ErrorOptionHasNoValue = 4;
-constexpr int ErrorEmptyStringParameter = 5;
-constexpr int ErrorIdAlreadyInUse = 6;
-constexpr int ErrorStringNotValid = 7;
-constexpr int ErrorCharacterNotValid = 8;
-constexpr int ErrorIdNotValid = 9;
-constexpr int ErrorFlagAssignedValue = 11;
-constexpr int TokenNotHandled = 12;
-} // namespace Result
-
-struct InputBinding {
-  char const *const *input;
-  int begin;
-  int end;
-};
-
-struct ArgParserT;
-using ArgParser = ArgParserT *;
-using UniqueArgParser = std::unique_ptr<ArgParserT, void (*)(ArgParser const)>;
-
-int createArgParser(ArgParser *const, bool debug = false);
-void destroyArgParser(ArgParser const);
-UniqueArgParser createArgParser(bool debug = false);
-
-int addFlag(ArgParser const parser, std::string const &l, char const s = 0);
-int addOption(ArgParser const parser, std::string const &l, char const s = 0);
-
-int parse(ArgParser const parser, InputBinding const *const binding,
-          std::size_t *const errorPosition = nullptr);
-
-int getFlagOccurrence(ArgParser const parser, std::string const &flag,
-                      std::size_t *count);
-int getOptionValues(ArgParser const parser, std::string const &opt,
-                    std::vector<std::string> *const out);
-int getFreeValues(ArgParser const parser, std::vector<std::string> *const out);
-
-int splitTest(int const argc, char const *const *const argv);
-} // namespace ap
 
 namespace ap {
 struct KeyValueT {
@@ -101,7 +51,9 @@ struct ArgParserT {
   char shortArgPrefix{'-'};
   bool debug{false};
 };
+} // namespace ap
 
+namespace ap {
 int handleLongArg(ArgParserT *const parser, std::size_t const pos,
                   std::string const *const id,
                   std::vector<char const *> const *const tokens,
@@ -113,11 +65,19 @@ int handleShortArg(ArgParserT *const parser, std::size_t const pos,
                    bool *const skipToken);
 
 int recognizeAndRegisterArg(ArgParserT *const parser, char const id,
-                            ArgInstanceInfoT **info, ArgTypeT *type);
+                            ArgInstanceInfoT ** const info, ArgTypeT * const type);
 
 int addArg(ArgParserT *const parser, ArgTypeT const type,
            std::string const &longForm, char const shortForm = 0);
 
 int split(KeyValueT *const pair, std::string const *const input,
           char const delimiter = '=');
-} // namespace ap
+
+int validateParseParameters(ArgParserT *const parser,
+                            char const *const *const input,
+                            std::size_t const begin, std::size_t end);
+
+std::vector<char const *> lookAhead(char const *const *input,
+                                    std::size_t const inputSz, std::size_t i,
+                                    std::size_t const n);
+}

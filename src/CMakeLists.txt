@@ -11,3 +11,6 @@ if (BUILD_PROD_TARGETS)
 		add_subdirectory(${module})
 	endforeach()
 endif()
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+add_subdirectory(test)

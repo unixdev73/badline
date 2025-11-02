@@ -18,10 +18,20 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#pragma once
+#include <cstdint>
+#include <cstddef>
 
-namespace sl::Result {
-constexpr int Success = 0;
-constexpr int ErrorMemoryAllocationFailure = 1;
-constexpr int ErrorNullptrParameter = 2;
-}; // namespace sl::Result
+namespace sl {
+struct LoggerT;
+}
+
+namespace demo {
+struct AppCLI {
+  uint32_t width{1280};
+  uint32_t height{720};
+  bool debug{false};
+};
+
+int parseCLI(AppCLI *const data, char const * const * const input,
+		std::size_t const begin, std::size_t const end, sl::LoggerT* const);
+} // namespace demo

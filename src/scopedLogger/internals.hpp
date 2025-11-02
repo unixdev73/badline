@@ -62,7 +62,7 @@ struct Buffer {
   std::size_t maxEntries{1000};
 };
 
-struct Logger {
+struct LoggerT {
   int logLevel{LogLevel::Info | LogLevel::Warning | LogLevel::Error};
   int outputMode{OutputMode::Console};
   int behavior{Behavior::AppendNewLine | Behavior::FlushStream |
@@ -81,12 +81,12 @@ struct Logger {
   Buffer logBuffer{};
 };
 
-int stepIn(Logger *const, std::string const &func);
-int stepOut(Logger *const);
-int log(Logger *const l, std::string const &msg, int const logLevel);
-void copyPropertiesToOneTimeVariants(Logger *const l);
+int stepIn(LoggerT *const, std::string const &func);
+int stepOut(LoggerT *const);
+int log(LoggerT *const l, std::string const &msg, int const logLevel);
+void copyPropertiesToOneTimeVariants(LoggerT *const l);
 
-std::string makeLogEntry(Logger *const l, std::string const &msg, int const lv);
+std::string makeLogEntry(LoggerT *const l, std::string const &msg, int const lv);
 std::string logLevelToString(int const level);
 std::string getTimestamp(std::string const &dateF, std::string const &timeF);
 } // namespace sl

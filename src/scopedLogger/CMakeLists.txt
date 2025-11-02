@@ -1,12 +1,4 @@
-add_library(scopedLogger)
+add_library(scopedLoggerInternals internals.cpp)
 
-target_sources(scopedLogger
-	PRIVATE
-		private/scopedLogger.cpp
-	PUBLIC
-		scopedLogger.cpp
-	PUBLIC
-		FILE_SET scopedLoggerModule
-		TYPE CXX_MODULES
-		FILES scopedLogger.ixx
-)
+add_library(scopedLogger interface.cpp)
+target_link_libraries(scopedLogger scopedLoggerInternals)

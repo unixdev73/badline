@@ -18,8 +18,8 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include "scopedLogger.hpp"
-#include "../result.hpp"
+#include <badline/scopedLogger.hpp>
+#include "internals.hpp"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -47,7 +47,7 @@ std::string logLevelToString(int const level) {
   }
 }
 
-EntryComponents makeEntryComponents(Logger *const l, std::string const &msg,
+EntryComponents makeEntryComponents(LoggerT *const l, std::string const &msg,
                                     int const level) {
   EntryComponents comps{};
   comps.timestamp = getTimestamp(l->dateFormat, l->timeFormat);
@@ -57,7 +57,7 @@ EntryComponents makeEntryComponents(Logger *const l, std::string const &msg,
   return comps;
 }
 
-std::string makeLogEntry(Logger *const l, EntryComponents const &comps) {
+std::string makeLogEntry(LoggerT *const l, EntryComponents const &comps) {
   std::string entry{};
   if ((l->oneTimeBehavior ? l->oneTimeBehavior : l->behavior) &
       Behavior::PrefixTime)
@@ -79,7 +79,7 @@ std::string makeLogEntry(Logger *const l, EntryComponents const &comps) {
   return entry;
 }
 
-void logToConsole(Logger *const l, std::string const &entry, int const level) {
+void logToConsole(LoggerT *const l, std::string const &entry, int const level) {
   auto const flush = [l](std::ostream &s, std::string const &entry) {
     s << entry;
     if ((l->oneTimeBehavior ? l->oneTimeBehavior : l->behavior) &
@@ -99,7 +99,7 @@ void logToConsole(Logger *const l, std::string const &entry, int const level) {
   }
 }
 
-void logToBuffer(Logger *const l, EntryComponents const &comps,
+void logToBuffer(LoggerT *const l, EntryComponents const &comps,
                  int const level) {
   if ((l->oneTimeOutputMode ? l->oneTimeOutputMode : l->outputMode) &
       OutputMode::Buffer) {
@@ -110,7 +110,7 @@ void logToBuffer(Logger *const l, EntryComponents const &comps,
   }
 }
 
-int log(Logger *const l, std::string const &msg, int logLevel) {
+int log(LoggerT *const l, std::string const &msg, int logLevel) {
   if (!((l->oneTimeLogLevel ? l->oneTimeLogLevel : l->logLevel) & logLevel))
     return Result::Success;
 
@@ -132,18 +132,18 @@ int log(Logger *const l, std::string const &msg, int logLevel) {
   return Result::Success;
 }
 
-int stepIn(Logger *const l, std::string const &func) {
+int stepIn(LoggerT *const l, std::string const &func) {
   l->functions.push_back(func);
   return Result::Success;
 }
 
-int stepOut(Logger *const l) {
+int stepOut(LoggerT *const l) {
   if (l->functions.size())
     l->functions.pop_back();
   return Result::Success;
 }
 
-void copyPropertiesToOneTimeVariants(Logger *const l) {
+void copyPropertiesToOneTimeVariants(LoggerT *const l) {
   if (!l->oneTimePropertiesInitialized) {
     l->oneTimeOutputMode = l->outputMode;
     l->oneTimeBehavior = l->behavior;

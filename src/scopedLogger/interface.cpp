@@ -18,17 +18,13 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-module;
-
-#include "private/scopedLogger.hpp"
-#include "result.hpp"
+#include <badline/scopedLogger.hpp>
+#include "internals.hpp"
 #include <iostream>
 #include <ctime>
 
-module ScopedLogger;
-
 namespace sl {
-int printTrace(Logger *const l) {
+int printTrace(LoggerT *const l) {
   std::string const indent{"  "};
   auto &s = std::cout;
 
@@ -44,19 +40,19 @@ int printTrace(Logger *const l) {
   return Result::Success;
 }
 
-int inf(Logger *const l, std::string const &msg) {
+int inf(LoggerT *const l, std::string const &msg) {
   return log(l, msg, LogLevel::Info);
 }
 
-int wrn(Logger *const l, std::string const &msg) {
+int wrn(LoggerT *const l, std::string const &msg) {
   return log(l, msg, LogLevel::Warning);
 }
 
-int err(Logger *const l, std::string const &msg) {
+int err(LoggerT *const l, std::string const &msg) {
   return log(l, msg, LogLevel::Error);
 }
 
-int addOrRemoveBit(Logger *const l, bool const v, int &target, int const c) {
+int addOrRemoveBit(LoggerT *const l, bool const v, int &target, int const c) {
   if (!l)
     return Result::ErrorNullptrParameter;
 
@@ -68,110 +64,110 @@ int addOrRemoveBit(Logger *const l, bool const v, int &target, int const c) {
   return Result::Success;
 }
 
-int outputToConsole(Logger *const l, bool const v) {
+int outputToConsole(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->outputMode, OutputMode::Console);
 }
 
-int outputToFile(Logger *const l, bool const v) {
+int outputToFile(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->outputMode, OutputMode::File);
 }
 
-int outputToBuffer(Logger *const l, bool const v) {
+int outputToBuffer(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->outputMode, OutputMode::Buffer);
 }
 
-int logLevelInf(Logger *const l, bool const v) {
+int logLevelInf(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->logLevel, LogLevel::Info);
 }
 
-int logLevelWrn(Logger *const l, bool const v) {
+int logLevelWrn(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->logLevel, LogLevel::Warning);
 }
 
-int logLevelErr(Logger *const l, bool const v) {
+int logLevelErr(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->logLevel, LogLevel::Error);
 }
 
-int appendNewLine(Logger *const l, bool const v) {
+int appendNewLine(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->behavior, Behavior::AppendNewLine);
 }
 
-int flushStream(Logger *const l, bool const v) {
+int flushStream(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->behavior, Behavior::FlushStream);
 }
 
-int prefixTime(Logger *const l, bool const v) {
+int prefixTime(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->behavior, Behavior::PrefixTime);
 }
 
-int prefixLevel(Logger *const l, bool const v) {
+int prefixLevel(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->behavior, Behavior::PrefixLevel);
 }
 
-int prefixFunc(Logger *const l, bool const v) {
+int prefixFunc(LoggerT *const l, bool const v) {
   return addOrRemoveBit(l, v, l->behavior, Behavior::PrefixFunc);
 }
 
-int oneTimeOutputToConsole(Logger *const l, bool const v) {
+int oneTimeOutputToConsole(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeOutputMode, OutputMode::Console);
 }
 
-int oneTimeOutputToFile(Logger *const l, bool const v) {
+int oneTimeOutputToFile(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeOutputMode, OutputMode::File);
 }
 
-int oneTimeOutputToBuffer(Logger *const l, bool const v) {
+int oneTimeOutputToBuffer(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeOutputMode, OutputMode::Buffer);
 }
 
-int oneTimeLogLevelInf(Logger *const l, bool const v) {
+int oneTimeLogLevelInf(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeLogLevel, LogLevel::Info);
 }
 
-int oneTimeLogLevelWrn(Logger *const l, bool const v) {
+int oneTimeLogLevelWrn(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeLogLevel, LogLevel::Warning);
 }
 
-int oneTimeLogLevelErr(Logger *const l, bool const v) {
+int oneTimeLogLevelErr(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeLogLevel, LogLevel::Error);
 }
 
-int oneTimeAppendNewLine(Logger *const l, bool const v) {
+int oneTimeAppendNewLine(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeBehavior, Behavior::AppendNewLine);
 }
 
-int oneTimeFlushStream(Logger *const l, bool const v) {
+int oneTimeFlushStream(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeBehavior, Behavior::FlushStream);
 }
 
-int oneTimePrefixTime(Logger *const l, bool const v) {
+int oneTimePrefixTime(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeBehavior, Behavior::PrefixTime);
 }
 
-int oneTimePrefixLevel(Logger *const l, bool const v) {
+int oneTimePrefixLevel(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeBehavior, Behavior::PrefixLevel);
 }
 
-int oneTimePrefixFunc(Logger *const l, bool const v) {
+int oneTimePrefixFunc(LoggerT *const l, bool const v) {
   copyPropertiesToOneTimeVariants(l);
   return addOrRemoveBit(l, v, l->oneTimeBehavior, Behavior::PrefixFunc);
 }
 
-int createLogger(Logger **const handle, std::string const &func) {
+int createLogger(LoggerT **const handle, std::string const &func) {
   if (!handle)
     return Result::ErrorNullptrParameter;
 
-  if (auto ptr = new Logger{}; ptr) {
+  if (auto ptr = new LoggerT{}; ptr) {
     *handle = ptr;
     stepIn(ptr, func);
     return Result::Success;
@@ -180,15 +176,15 @@ int createLogger(Logger **const handle, std::string const &func) {
   return Result::ErrorMemoryAllocationFailure;
 }
 
-void destroyLogger(Logger *const handle) { delete handle; }
+void destroyLogger(LoggerT *const handle) { delete handle; }
 
 UniqueLogger createLogger(std::string const &func) {
-  Logger *handle{};
+  LoggerT *handle{};
   createLogger(&handle, func);
   return {handle, destroyLogger};
 }
 
-FunctionScope::FunctionScope(Logger *const logger, std::string const &func) {
+FunctionScope::FunctionScope(LoggerT *const logger, std::string const &func) {
   logger_ = logger;
   stepIn(logger_, func);
 }

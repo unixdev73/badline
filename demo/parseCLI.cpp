@@ -18,18 +18,11 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-module;
-
+#include <badline/scopedLogger.hpp>
+#include <badline/argParser.hpp>
+#include "parseCLI.hpp"
 #include <iostream>
 #include <string>
-
-module DemoParseCLI;
-
-#define MCR_ERR(msg, code)                                                     \
-  do {                                                                         \
-    std::cerr << "Error: " << __func__ << ": " << msg << std::endl;            \
-    return code;                                                               \
-  } while (0)
 
 namespace demo {
 template <typename T> struct ArgInfoT {
@@ -43,22 +36,18 @@ struct ArgDatabaseT {
   std::unordered_map<std::string, ArgInfoT<bool>> flags{};
 };
 
-template <typename T, typename F>
-void registerArgs(ap::UniqueArgParser &p, F &&func, T const &args) {
-  for (auto const &[lf, info] : args)
-    func(p.get(), lf, info.shortForm);
-}
-
-void populateDatabase(ap::UniqueArgParser &p, ArgDatabaseT *db,
-                      AppCLI *const data) {
+void populateDatabase(ap::ArgParserT* const p, ArgDatabaseT *db, AppCLI *const data) {
   db->flags.emplace("debug", ArgInfoT{'d', &data->debug});
-  registerArgs(p, ap::addFlag, db->flags);
+	for (auto const& desc : db->flags)
+		ap::addFlag(p, desc.first, desc.second.shortForm);
 
   db->numOpts.emplace("width", ArgInfoT{'w', &data->width});
   db->numOpts.emplace("height", ArgInfoT{'h', &data->height});
-  registerArgs(p, ap::addOption, db->numOpts);
+	for (auto const& desc : db->numOpts)
+		ap::addOption(p, desc.first, desc.second.shortForm);
 
-  registerArgs(p, ap::addOption, db->strOpts);
+	for (auto const& desc : db->strOpts)
+		ap::addOption(p, desc.first, desc.second.shortForm);
 }
 
 void printValues(ArgDatabaseT *const db) {
@@ -74,11 +63,11 @@ void printValues(ArgDatabaseT *const db) {
     std::cout << "\tID: '" << id << "', value: '" << *info.value << "'\n";
 }
 
-int readStr(ap::UniqueArgParser &p, std::string const &opt, std::string *out) {
+int readStr(ap::ArgParserT* const p, sl::LoggerT* const logger, std::string const &opt, std::string *out) {
   try {
     std::vector<std::string> vals{};
 
-    if (auto error = ap::getOptionValues(p.get(), opt, &vals); error) {
+    if (auto error = ap::getOptionValues(p, opt, &vals); error) {
       std::string const err = std::to_string(error);
       return 1;
     }
@@ -88,16 +77,17 @@ int readStr(ap::UniqueArgParser &p, std::string const &opt, std::string *out) {
 
     *out = vals.front();
   } catch (...) {
-    MCR_ERR("Failed to read " + opt + " option value.", 2);
+		sl::err(logger, "Failed to read " + opt + " option value.");
+		return 2;
   }
 
   return 0;
 }
 
-int readUint32(ap::UniqueArgParser &p, std::string const &opt, uint32_t *out) {
+int readUint32(ap::ArgParserT * const p, sl::LoggerT* const logger, std::string const &opt, uint32_t *out) {
   std::string tmp{};
   try {
-    if (auto error = readStr(p, opt, &tmp); error) {
+    if (auto error = readStr(p, logger, opt, &tmp); error) {
       std::string const err = std::to_string(error);
       return 1;
     }
@@ -107,56 +97,63 @@ int readUint32(ap::UniqueArgParser &p, std::string const &opt, uint32_t *out) {
 
     *out = std::stoul(tmp);
   } catch (...) {
-    MCR_ERR("Failed to convert: '" << tmp << "' to a number.", 1);
+		sl::err(logger, "Failed to convert: '" + tmp + "' to a number.");
+		return 1;
   }
 
   return 0;
 }
 
-int readValues(ap::UniqueArgParser &p, ArgDatabaseT *db) {
+int readValues(ap::ArgParserT * const p, sl::LoggerT* const logger, ArgDatabaseT *db) {
   for (auto const &[id, info] : db->flags) {
     std::size_t count{};
-    if (auto error = ap::getFlagOccurrence(p.get(), id, &count); error)
+    if (auto error = ap::getFlagOccurrence(p, id, &count); error)
       return 1;
     *info.value = static_cast<bool>(count);
   }
 
   for (auto const &[id, info] : db->numOpts)
-    if (auto error = readUint32(p, id, info.value); error)
+    if (auto error = readUint32(p, logger, id, info.value); error)
       return 2;
 
   for (auto const &[id, info] : db->strOpts)
-    if (auto error = readStr(p, id, info.value); error)
+    if (auto error = readStr(p, logger, id, info.value); error)
       return 3;
 
   return 0;
 }
 
-int parseCLI(AppCLI *const data, ap::InputBinding *const binding) {
-  if (!data || !binding)
-    MCR_ERR("One of the input parameters is a nullptr.", 1);
+int parseCLI(AppCLI *const data, char const *const *const input,
+             std::size_t const begin, std::size_t const end,
+             sl::LoggerT* const l) {
+	if (!l) return 255;
 
-  auto p = ap::createArgParser();
-  if (!p)
-    MCR_ERR("Creating an arg parser instance failed.", 2);
+  if (!data || !input)
+    sl::err(l, "One of the input parameters is a nullptr.");
+
+	ap::ArgParserT* p{};
+	if (auto error = ap::createArgParser(&p, true); error) {
+		sl::err(l, "Failed to create argument parser.");
+		return 2;
+	}
 
   ArgDatabaseT db{};
   populateDatabase(p, &db, data);
 
   std::vector<std::string> fv{};
   std::size_t errPos{};
-  if (auto error = ap::parse(p.get(), binding, &errPos); error) {
+  if (auto error = ap::parse(p, input, begin, end, &errPos); error) {
     if (error == ap::Result::ErrorOptionHasNoValue) {
-      std::string const option = binding->input[errPos];
-      MCR_ERR("The option: '" + option + "' requires a value.", 3);
+      std::string const option = input[errPos];
+			sl::err(l, "The option: '" + option + "' requires a value.");
     }
 
-    MCR_ERR("Failed with error code: " + std::to_string(error), 5);
+		sl::err(l, "Failed with error code: " + std::to_string(error));
   }
-  if (ap::getFreeValues(p.get(), &fv); fv.size())
-    MCR_ERR("Free values are not allowed: '" + fv.front() + "'", 4);
+  if (ap::getFreeValues(p, &fv); fv.size())
+    sl::err(l, "Free values are not allowed: '" + fv.front() + "'");
 
-  if (auto error = readValues(p, &db); error)
+  if (auto error = readValues(p, l, &db); error)
     return 6;
 
   printValues(&db);

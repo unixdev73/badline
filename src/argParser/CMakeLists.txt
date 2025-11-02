@@ -1,8 +1,4 @@
-add_library(argParser argParser.cpp)
+add_library(argParserInternals internals.cpp)
 
-target_sources(argParser PUBLIC FILE_SET argParserModule
-	TYPE CXX_MODULES
-	FILES argParser.ixx
-)
-
-include(testSplitter.cmake)
+add_library(argParser interface.cpp)
+target_link_libraries(argParser argParserInternals)
