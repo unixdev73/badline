@@ -49,13 +49,13 @@ void destroyArgParser(ArgParserT *const p) { delete p; }
 int addFlag(ArgParserT *const parser, std::string const &lf, char const s,
             sl::LoggerT *const l) {
   sl::FunctionScope fs{l, __func__};
-  return addArg(parser, ArgTypeT::Flag, lf, s, l);
+  return addArg(parser, ArgTypeT::Flag, lf, s);
 }
 
 int addOption(ArgParserT *const parser, std::string const &lf, char const s,
               sl::LoggerT *const l) {
   sl::FunctionScope fs{l, __func__};
-  return addArg(parser, ArgTypeT::Option, lf, s, l);
+  return addArg(parser, ArgTypeT::Option, lf, s);
 }
 
 int parse(ArgParserT *const p, char const *const *const input,
@@ -64,7 +64,7 @@ int parse(ArgParserT *const p, char const *const *const input,
   sl::FunctionScope fs{l, __func__};
   using sl::err;
 
-  if (auto r = validateParseParameters(p, input, begin, end, l);
+  if (auto r = validateParseParameters(p, input, begin, end);
       r != Result::Success)
     return r;
   if (begin == end)
@@ -76,7 +76,7 @@ int parse(ArgParserT *const p, char const *const *const input,
     std::string const token = input[i];
     bool skipToken{false};
 
-    auto result = handleShortArg(p, tokenPos, &token, &tokens, &skipToken, l);
+    auto result = handleShortArg(p, tokenPos, &token, &tokens, &skipToken);
     if (result == Result::Success) {
       if (skipToken)
         ++i;
@@ -87,7 +87,7 @@ int parse(ArgParserT *const p, char const *const *const input,
       return result;
     }
 
-    result = handleLongArg(p, tokenPos, &token, &tokens, &skipToken, l);
+    result = handleLongArg(p, tokenPos, &token, &tokens, &skipToken);
     if (result == Result::Success) {
       if (skipToken)
         ++i;

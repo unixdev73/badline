@@ -19,32 +19,21 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/argParser.hpp>
-#include "requiredLoggerInterface.hpp"
 #include "internals.hpp"
 
 namespace ap {
 int validateParseParameters(ArgParserT *const parser,
                             char const *const *const input,
-                            std::size_t const begin, std::size_t end,
-                            sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
-  using sl::err;
-
+                            std::size_t const begin, std::size_t end) {
   if (!parser) {
-    if (l)
-      err(l, "The ArgParser parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
   if (!input) {
-    if (l)
-      err(l, "The InputBinding input parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
   if (begin > end) {
-    if (l)
-      err(l, "The InputBinding range begin > end.");
     return Result::ErrorRangeBeginGreaterThanEnd;
   }
   return Result::Success;
@@ -79,9 +68,7 @@ std::pair<std::string, std::string> getArgVal(std::string const &token,
 int handleLongArg(ArgParserT *const parser, std::size_t const pos,
                   std::string const *const id,
                   std::vector<char const *> const *const tokens,
-                  bool *const skipToken, sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
-  using sl::err;
+                  bool *const skipToken) {
 
   if (id->size() < parser->longArgPrefix.size() + 1)
     return Result::TokenNotHandled;
@@ -150,9 +137,7 @@ int checkArgListPreconditions(ArgParserT *const parser, std::string const &key,
 int handleShortArg(ArgParserT *const parser, std::size_t const pos,
                    std::string const *const id,
                    std::vector<char const *> const *const tokens,
-                   bool *const skipToken, sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
-  using sl::err;
+                   bool *const skipToken) {
 
   if (auto r = checkShortArgPreconditions(parser, id); r != Result::Success)
     return r;
@@ -205,14 +190,9 @@ int recognizeAndRegisterArg(ArgParserT *const parser, char const id,
 }
 
 int addArg(ArgParserT *const p, ArgTypeT const type,
-           std::string const &longForm, char const shortForm,
-           sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
-  using sl::err;
+           std::string const &longForm, char const shortForm) {
 
   if (longForm.empty()) {
-    if (l)
-      err(l, "The long form parameter identifier is empty.");
     return Result::ErrorEmptyStringParameter;
   }
 
@@ -221,27 +201,19 @@ int addArg(ArgParserT *const p, ArgTypeT const type,
   auto &sarg = isFlag ? p->flags.shortForm : p->options.shortForm;
 
   if (larg.contains(longForm)) {
-    if (l)
-      err(l, "The long form parameter identifier is already taken.");
     return Result::ErrorIdAlreadyInUse;
   }
 
   if (shortForm && sarg.contains(shortForm)) {
-    if (l)
-      err(l, "The short form parameter identifier is already taken.");
     return Result::ErrorIdAlreadyInUse;
   }
 
   for (auto const c : longForm)
     if (!std::isalnum(c)) {
-      if (l)
-        err(l, "The parameter long form contains unsupported chars.");
       return Result::ErrorStringNotValid;
     }
 
   if (!std::isalnum(shortForm)) {
-    if (l)
-      err(l, "The parameter short form is an unsupported char.");
     return Result::ErrorCharacterNotValid;
   }
 

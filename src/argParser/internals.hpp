@@ -25,10 +25,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <list>
 #include <vector>
 
-namespace sl {
-struct LoggerT;
-}
-
 namespace ap {
 struct KeyValueT {
   std::string key;
@@ -62,28 +58,26 @@ namespace ap {
 int handleLongArg(ArgParserT *const parser, std::size_t const pos,
                   std::string const *const id,
                   std::vector<char const *> const *const tokens,
-                  bool *const skipToken, sl::LoggerT *const l = nullptr);
+                  bool *const skipToken);
 
 int handleShortArg(ArgParserT *const parser, std::size_t const pos,
                    std::string const *const id,
                    std::vector<char const *> const *const tokens,
-                   bool *const skipToken, sl::LoggerT *const l = nullptr);
+                   bool *const skipToken);
 
 int recognizeAndRegisterArg(ArgParserT *const parser, char const id,
                             ArgInstanceInfoT **const info,
                             ArgTypeT *const type);
 
 int addArg(ArgParserT *const parser, ArgTypeT const type,
-           std::string const &longForm, char const shortForm = 0,
-           sl::LoggerT *const l = nullptr);
+           std::string const &longForm, char const shortForm = 0);
 
 int split(KeyValueT *const pair, std::string const *const input,
           char const delimiter = '=');
 
 int validateParseParameters(ArgParserT *const parser,
                             char const *const *const input,
-                            std::size_t const begin, std::size_t end,
-                            sl::LoggerT *const l = nullptr);
+                            std::size_t const begin, std::size_t end);
 
 std::vector<char const *> lookAhead(char const *const *input,
                                     std::size_t const inputSz, std::size_t i,
