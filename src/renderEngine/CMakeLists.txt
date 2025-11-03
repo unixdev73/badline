@@ -5,7 +5,9 @@ find_package(glm REQUIRED)
 add_library(vulkanMemoryAllocator vulkanMemoryAllocator.cpp)
 target_compile_options(vulkanMemoryAllocator PRIVATE -w)
 
-add_library(renderEngine renderEngine.cpp)
+add_library(renderEngine
+	interface.cpp
+)
 
 target_link_libraries(renderEngine
 	${Vulkan_LIBRARIES}

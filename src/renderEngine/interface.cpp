@@ -19,7 +19,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/renderEngine.hpp>
-#include "private/renderEngine.hpp"
+#include "internals.hpp"
 #include <iostream>
 #include <string>
 
