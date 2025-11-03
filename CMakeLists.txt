@@ -7,9 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED 1)
 set(CMAKE_CXX_STANDARD 20)
 
 set(PROD_TARGETS
-	"argParser"
-	"renderEngine"
 	"scopedLogger"
+	"renderEngine"
+	"argParser"
 )
 
 include_directories(/usr/local/include)

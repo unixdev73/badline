@@ -24,6 +24,19 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <ctime>
 
 namespace sl {
+int resizeLogBuffer(LoggerT *const l, std::size_t const size) {
+  if (!l)
+    return Result::ErrorNullptrParameter;
+  if (!size)
+    return Result::ErrorLogBufferSizeNotValid;
+
+  while (l->logBuffer.entries.size() > size)
+    l->logBuffer.entries.pop_front();
+
+  l->logBuffer.maxEntries = size;
+  return Result::Success;
+}
+
 int printTrace(LoggerT *const l) {
   std::string const indent{"  "};
   auto &s = std::cout;

@@ -28,6 +28,7 @@ namespace Result {
 constexpr int Success = 0;
 constexpr int ErrorMemoryAllocationFailure = 1;
 constexpr int ErrorNullptrParameter = 2;
+constexpr int ErrorLogBufferSizeNotValid = 3;
 }; // namespace Result
 
 struct LoggerT;
@@ -69,6 +70,7 @@ int inf(LoggerT *const, std::string const &msg);
 int wrn(LoggerT *const, std::string const &msg);
 int err(LoggerT *const, std::string const &msg);
 
+int resizeLogBuffer(LoggerT *const, std::size_t const size);
 int printTrace(LoggerT *const);
 
 class FunctionScope {

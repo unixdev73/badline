@@ -5,12 +5,24 @@ find_package(glm REQUIRED)
 add_library(vulkanMemoryAllocator vulkanMemoryAllocator.cpp)
 target_compile_options(vulkanMemoryAllocator PRIVATE -w)
 
+add_library(renderEngineLogger dummyLoggerImpl.cpp)
+
 add_library(renderEngine
 	interface.cpp
 )
 
-target_link_libraries(renderEngine
+set(renderEngineLibList
+	vulkanMemoryAllocator
 	${Vulkan_LIBRARIES}
 	${GLFW}
-	vulkanMemoryAllocator
 )
+
+if (USE_SCOPED_LOGGER)
+	message(STATUS "Using scoped logger for renderEngine")
+	list(APPEND renderEngineLibList scopedLogger)
+else()
+	message(STATUS "Using dummy logger for renderEngine")
+	list(APPEND renderEngineLibList renderEngineLogger)
+endif()
+
+target_link_libraries(renderEngine ${renderEngineLibList})
