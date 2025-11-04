@@ -18,24 +18,27 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <badline/scopedLogger.hpp>
 #include "internals.hpp"
+#include <badline/scopedLogger.hpp>
+#include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <iomanip>
-#include <chrono>
 
 namespace sl {
 std::string getTimestamp(std::string const &dateF, std::string const &timeF) {
   using clock_t = std::chrono::system_clock;
   std::time_t currentTime{clock_t::to_time_t(clock_t::now())};
+  auto now = clock_t::now();
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()) % 1000;
   std::tm timeMember = *std::localtime(&currentTime);
   std::stringstream buffer{};
   buffer << std::put_time(&timeMember, dateF.c_str()) << " ";
   buffer << std::put_time(&timeMember, timeF.c_str());
+  buffer << ":" << ms.count();
   return buffer.str();
 }
-
 std::string logLevelToString(int const level) {
   switch (level) {
   case LogLevel::Warning:
