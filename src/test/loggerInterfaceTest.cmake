@@ -1,5 +1,0 @@
-add_executable(argParserLoggerInterfaceTest loggerInterfaceTest.cpp)
-target_link_libraries(argParserLoggerInterfaceTest argParserLogger)
-
-add_executable(renderEngineLoggerInterfaceTest loggerInterfaceTest.cpp)
-target_link_libraries(renderEngineLoggerInterfaceTest renderEngineLogger)

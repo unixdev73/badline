@@ -19,24 +19,16 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/argParser.hpp>
-#include "requiredLoggerInterface.hpp"
 #include "internals.hpp"
 
 namespace ap {
-int createArgParser(ArgParserT **const p, bool debug, sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
-  using sl::err;
-
+int createArgParser(ArgParserT **const p, bool debug) {
   if (!p) {
-    if (l)
-      err(l, "The ArgParser parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
   *p = new ArgParserT{};
   if (!*p) {
-    if (l)
-      err(l, "Failed to allocate memory for the ArgParser.");
     return Result::ErrorMemoryAllocationFailure;
   }
 
@@ -46,24 +38,16 @@ int createArgParser(ArgParserT **const p, bool debug, sl::LoggerT *const l) {
 
 void destroyArgParser(ArgParserT *const p) { delete p; }
 
-int addFlag(ArgParserT *const parser, std::string const &lf, char const s,
-            sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
+int addFlag(ArgParserT *const parser, std::string const &lf, char const s) {
   return addArg(parser, ArgTypeT::Flag, lf, s);
 }
 
-int addOption(ArgParserT *const parser, std::string const &lf, char const s,
-              sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
+int addOption(ArgParserT *const parser, std::string const &lf, char const s) {
   return addArg(parser, ArgTypeT::Option, lf, s);
 }
 
 int parse(ArgParserT *const p, char const *const *const input,
-          std::size_t const begin, std::size_t const end, std::size_t *errPos,
-          sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
-  using sl::err;
-
+          std::size_t const begin, std::size_t const end, std::size_t *errPos) {
   if (auto r = validateParseParameters(p, input, begin, end);
       r != Result::Success)
     return r;
@@ -105,19 +89,12 @@ int parse(ArgParserT *const p, char const *const *const input,
 }
 
 int getFlagOccurrence(ArgParserT *const p, std::string const &flag,
-                      std::size_t *count, sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
-  using sl::err;
-
+                      std::size_t *count) {
   if (!p) {
-    if (l)
-      err(l, "The ArgParser parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
   if (!count) {
-    if (l)
-      err(l, "The count parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
@@ -130,25 +107,16 @@ int getFlagOccurrence(ArgParserT *const p, std::string const &flag,
 }
 
 int getOptionValues(ArgParserT *const p, std::string const &opt,
-                    std::vector<std::string> *const out, sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
-  using sl::err;
-
+                    std::vector<std::string> *const out) {
   if (!p) {
-    if (l)
-      err(l, "The ArgParser parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
   if (!out) {
-    if (l)
-      err(l, "The out parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
   if (!p->options.longForm.contains(opt)) {
-    if (l)
-      err(l, "The id: '" + opt + "' is not a valid option.");
     return Result::ErrorIdNotValid;
   }
 
@@ -168,20 +136,12 @@ int getOptionValues(ArgParserT *const p, std::string const &opt,
   return Result::Success;
 }
 
-int getFreeValues(ArgParserT *const p, std::vector<std::string> *const out,
-                  sl::LoggerT *const l) {
-  sl::FunctionScope fs{l, __func__};
-  using sl::err;
-
+int getFreeValues(ArgParserT *const p, std::vector<std::string> *const out) {
   if (!p) {
-    if (l)
-      err(l, "The ArgParser parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 
   if (!out) {
-    if (l)
-      err(l, "The out parameter is a nullptr.");
     return Result::ErrorNullptrParameter;
   }
 

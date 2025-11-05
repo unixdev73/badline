@@ -16,8 +16,7 @@
 
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "BUILD_TARGETS": "all",
-        "USE_SCOPED_LOGGER": "true"
+        "BUILD_TARGETS": "all"
       }
     }
   ]

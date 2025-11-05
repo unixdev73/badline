@@ -20,5 +20,5 @@ glfw glm
 
 # Building
 
-<p> cmake --preset dev </p>
+<p> cmake --preset dev --parallel </p>
 <p> cmake --build ./build </p>

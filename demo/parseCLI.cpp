@@ -41,15 +41,15 @@ void populateDatabase(ap::ArgParserT *const p, ArgDatabaseT *db,
   sl::FunctionScope fs{l, __func__};
   db->flags.emplace("debug", ArgInfoT{'d', &data->debug});
   for (auto const &desc : db->flags)
-    ap::addFlag(p, desc.first, desc.second.shortForm, l);
+    ap::addFlag(p, desc.first, desc.second.shortForm);
 
   db->numOpts.emplace("width", ArgInfoT{'w', &data->width});
   db->numOpts.emplace("height", ArgInfoT{'h', &data->height});
   for (auto const &desc : db->numOpts)
-    ap::addOption(p, desc.first, desc.second.shortForm, l);
+    ap::addOption(p, desc.first, desc.second.shortForm);
 
   for (auto const &desc : db->strOpts)
-    ap::addOption(p, desc.first, desc.second.shortForm, l);
+    ap::addOption(p, desc.first, desc.second.shortForm);
 }
 
 void printValues(ArgDatabaseT *const db, sl::LoggerT *const l) {
@@ -151,7 +151,7 @@ int parseCLI(AppCLI *const data, char const *const *const input,
     sl::err(l, "One of the input parameters is a nullptr.");
 
   ap::ArgParserT *p{};
-  if (auto error = ap::createArgParser(&p, true, l); error) {
+  if (auto error = ap::createArgParser(&p, true); error) {
     sl::err(l, "Failed to create argument parser.");
     return 2;
   }
