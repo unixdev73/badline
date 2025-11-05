@@ -4,3 +4,5 @@ This project follows a few rules:
 	-> Every module has to be capable of being built independently!!!
 	-> Every module has its own set or result codes
 	-> Every module provides a public API
+	-> Heavy logic for each module is implemented in the private API
+	-> Only opaque handles are exposed to the client
