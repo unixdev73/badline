@@ -1,0 +1,6 @@
+This project follows a few rules:
+
+	-> This project is comprised of modules
+	-> Every module has to be capable of being built independently!!!
+	-> Every module has its own set or result codes
+	-> Every module provides a public API
