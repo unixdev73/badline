@@ -2,6 +2,8 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 	add_compile_options(-Wall -Wextra -Wpedantic -O0 -g)
 endif()
 
+message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+
 if ("${BUILD_TARGETS}" STREQUAL "all")
 	set(BUILD_PROD_TARGETS 1)
 endif()

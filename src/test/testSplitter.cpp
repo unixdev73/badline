@@ -50,14 +50,14 @@ int main(int const argc, char const *const *const argv) {
   std::string const input = argv[1];
   std::string const left = argv[2];
   std::string const right = argv[3];
-  ap::KeyValueT kv{};
+  std::pair<std::string, std::string> kv{};
 
-  ap::split(&kv, &input, '=');
+  ap::split(&input, '=', &kv);
   std::cout << "input: " << input << std::endl;
-  std::cout << "left: " << kv.key << std::endl;
-  std::cout << "right: " << kv.value << std::endl;
+  std::cout << "left: " << kv.first << std::endl;
+  std::cout << "right: " << kv.second << std::endl;
 
-  if (kv.key == left && kv.value == right)
+  if (kv.first == left && kv.second == right)
     return 0;
   return 1;
 }

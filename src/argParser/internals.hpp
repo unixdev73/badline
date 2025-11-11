@@ -21,17 +21,20 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #pragma once
 
 #include <unordered_map>
+#include <functional>
 #include <string>
-#include <list>
 #include <vector>
+#include <list>
 
 namespace ap {
-struct KeyValueT {
-  std::string key;
-  std::string value;
-};
+enum class ModeT { Strict, Lenient };
 
-enum class ArgTypeT { Flag, Option };
+enum class StateT {
+  ParseInputToken,
+  HandleOptionValue,
+  HandleOptionRogueValue,
+  HandleRogueFreeValue
+};
 
 struct ArgInstanceInfoT {
   std::size_t position{};
@@ -39,47 +42,142 @@ struct ArgInstanceInfoT {
 };
 
 struct ArgInstanceDatabaseT {
-  std::unordered_map<std::string, std::list<ArgInstanceInfoT>> longForm{};
-  std::unordered_map<char, std::list<ArgInstanceInfoT> *> shortForm{};
+  std::unordered_map<std::string,
+                     std::unique_ptr<std::vector<ArgInstanceInfoT>>>
+      longForm{};
+  std::unordered_map<char, std::vector<ArgInstanceInfoT> *> shortForm{};
+};
+
+struct GrammarRuleT {
+  enum Identifier : std::size_t {
+    // TERMS
+    ShortArgPrefix,
+    AssignmentOp,
+    Comma,
+    Digit,
+    Underscore,
+    SmallLetter,
+    BigLetter,
+    Letter,
+    Alnum,
+    NonAlnum,
+    Printable,
+    NonShortArgPrefix,
+
+    // NTERMS
+    ArgTerm,
+    LongArgPrefix,
+    ShortArg,
+    AlnumString,
+    PrintableString,
+    SimpleLongArg,
+    LongArg,
+    LongArgExtension,
+    UnderscoreExtension,
+    DashExtension,
+    AssignmentRight,
+    ArgAssignment,
+    CompoundArg,
+    FreeValue,
+
+    // UTIL
+    Start,
+    Size
+  };
+
+  static int toString(std::size_t const id, std::string *const output);
+};
+
+struct GrammarRuleVariantT {
+  std::size_t nonTermA{}, nonTermB{};
+  std::function<void(std::string const &, std::size_t const beginA,
+                     std::size_t const endA, std::size_t const beginB,
+                     std::size_t const endB)>
+      semanticAction{};
+};
+
+struct RuleInfoT {
+  std::size_t identifier;
+  std::size_t locationY;
+  std::size_t locationX;
+  std::size_t begin, end;
+
+  bool operator==(RuleInfoT const &o) const {
+    return identifier == o.identifier && locationX == o.locationX &&
+           locationY == o.locationY && begin == o.begin && end == o.end;
+  }
+};
+
+struct BackPtrT {
+  std::size_t variant;
+  std::size_t splitPoint;
+  RuleInfoT ruleLHS;
+  RuleInfoT ruleRHS;
+
+  bool operator==(BackPtrT const &o) const {
+    return variant == o.variant && splitPoint == o.splitPoint &&
+           ruleLHS == o.ruleLHS && ruleRHS == o.ruleRHS;
+  }
+};
+
+struct TokenInfoT {
+  std::string argName{};
+  std::string argExt{};
+  std::string argVal{};
+  bool isArgList{};
+  bool isFreeVal{};
+};
+
+struct ParsingDatabaseT {
+  using NonTermId = std::size_t;
+  using TermId = char;
+  using TermPairT = std::pair<NonTermId, TermId>;
+  std::vector<TermPairT> termMapping{};
+
+  using GrammarRuleT = std::vector<GrammarRuleVariantT>;
+  std::vector<GrammarRuleT> grammar{};
+
+  using ParseChartT = std::vector<std::vector<std::vector<bool>>>;
+  ParseChartT chart{};
+
+  using RuleVariationsT = std::vector<BackPtrT>;
+  using BackChartT = std::vector<std::vector<std::vector<RuleVariationsT>>>;
+  BackChartT back{};
+
+  using RuleDescT = std::pair<NonTermId, BackPtrT>;
+  std::list<RuleDescT> serialized{};
+
+  TokenInfoT tokenInfo{};
 };
 
 struct ArgParserT {
-  std::list<ArgInstanceInfoT> freeValues{};
+  std::vector<ArgInstanceInfoT> freeValues{};
   ArgInstanceDatabaseT options{};
   ArgInstanceDatabaseT flags{};
 
-  std::string longArgPrefix{"--"};
-  char shortArgPrefix{'-'};
-  bool debug{false};
+  ParsingDatabaseT database{};
+  StateT currentState{};
+  ModeT mode{};
+
+  std::vector<ArgInstanceInfoT> *targetOption{};
+  std::size_t errorPosition{};
 };
 } // namespace ap
 
 namespace ap {
-int handleLongArg(ArgParserT *const parser, std::size_t const pos,
-                  std::string const *const id,
-                  std::vector<char const *> const *const tokens,
-                  bool *const skipToken);
+int updateArguments(ArgParserT *const handle, std::string const *const token,
+                    std::size_t const position);
+int tracePostorderPath(ParsingDatabaseT *const database,
+                       std::size_t const variant);
+int initParseChart(ParsingDatabaseT *const database,
+                   std::string const *const input);
+int parseCYK(ParsingDatabaseT *const database, std::string const *const input);
 
-int handleShortArg(ArgParserT *const parser, std::size_t const pos,
-                   std::string const *const id,
-                   std::vector<char const *> const *const tokens,
-                   bool *const skipToken);
+int fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database);
+int fillParsingDatabaseWithDigits(ParsingDatabaseT *const database);
+int fillParsingDatabaseWithMisc(ParsingDatabaseT *const database);
+int fillParsingDatabase(ParsingDatabaseT *const database);
 
-int recognizeAndRegisterArg(ArgParserT *const parser, char const id,
-                            ArgInstanceInfoT **const info,
-                            ArgTypeT *const type);
-
-int addArg(ArgParserT *const parser, ArgTypeT const type,
-           std::string const &longForm, char const shortForm = 0);
-
-int split(KeyValueT *const pair, std::string const *const input,
-          char const delimiter = '=');
-
-int validateParseParameters(ArgParserT *const parser,
-                            char const *const *const input,
-                            std::size_t const begin, std::size_t end);
-
-std::vector<char const *> lookAhead(char const *const *input,
-                                    std::size_t const inputSz, std::size_t i,
-                                    std::size_t const n);
+int split(std::string const *const input, char const delimiter,
+          std::pair<std::string, std::string> *const output);
 } // namespace ap

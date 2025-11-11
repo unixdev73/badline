@@ -1,5 +1,4 @@
 add_executable(demo
-	parseCLI.cpp
 	main.cpp
 )
 

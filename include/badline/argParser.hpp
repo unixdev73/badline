@@ -20,44 +20,87 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <vector>
 #include <string>
 
 namespace ap {
 struct ArgParserT;
 
 namespace Result {
-constexpr int Success = 0;
-constexpr int ErrorNullptrParameter = 1;
-constexpr int ErrorMemoryAllocationFailure = 2;
-constexpr int ErrorRangeBeginGreaterThanEnd = 3;
-constexpr int ErrorOptionHasNoValue = 4;
-constexpr int ErrorEmptyStringParameter = 5;
-constexpr int ErrorIdAlreadyInUse = 6;
-constexpr int ErrorStringNotValid = 7;
-constexpr int ErrorCharacterNotValid = 8;
-constexpr int ErrorIdNotValid = 9;
-constexpr int ErrorFlagAssignedValue = 11;
-constexpr int TokenNotHandled = 12;
+enum Type : int {
+  Success,
+
+  ErrorNullptrHandle,
+  ErrorNullptrInput,
+  ErrorNullptrCount,
+  ErrorNullptrPosition,
+  ErrorNullptrValue,
+  ErrorNullptrOutput,
+
+  ErrorArgLongFormNotUnique,
+  ErrorArgShortFormNotUnique,
+
+  ErrorArgLongFormNotValid,
+  ErrorArgShortFormNotValid,
+  ErrorBeginEndRangeNotValid,
+  ErrorInstanceIndexNotValid,
+
+  ErrorTermTokenNotValid,
+  ErrorMemoryAllocationFailure,
+  ErrorResultCodeNotValid,
+  ErrorRuleIdentifierNotValid,
+  ErrorExpectedArgListToken,
+
+  ErrorStartSymbolNotDerivedFromInput,
+  ErrorInputTokenNotValid,
+  ErrorOptionRequiresValue
+};
+
+int toString(int const result, std::string *const output);
 } // namespace Result
 
-int createArgParser(ArgParserT **const, bool debug = false);
+int createArgParser(ArgParserT **const handle);
 
-void destroyArgParser(ArgParserT *const);
+void destroyArgParser(ArgParserT const *const handle);
 
-int addFlag(ArgParserT *const parser, std::string const &l, char const s = 0);
+int addFlag(ArgParserT *const handle, std::string const &argLongForm,
+            char const argShortForm = 0);
 
-int addOption(ArgParserT *const parser, std::string const &l, char const s = 0);
+int addOption(ArgParserT *const handle, std::string const &argLongForm,
+              char const argShortForm = 0);
 
-int parse(ArgParserT *const parser, char const *const *const input,
-          std::size_t const begin, std::size_t const end,
-          std::size_t *const errorPosition = nullptr);
+int parse(ArgParserT *const handle, char const *const *const input,
+          std::size_t const begin, std::size_t const end);
 
-int getFlagOccurrence(ArgParserT *const parser, std::string const &flag,
-                      std::size_t *count);
+int getErrorPosition(ArgParserT *const handle, std::size_t *const output);
 
-int getOptionValues(ArgParserT *const parser, std::string const &opt,
-                    std::vector<std::string> *const out);
+int getFlagCount(ArgParserT const *const handle, std::string const &argLongForm,
+                 std::size_t *const count);
 
-int getFreeValues(ArgParserT *const parser, std::vector<std::string> *const out);
+int getFlagInstancePosition(ArgParserT const *const handle,
+                            std::string const &argLongForm,
+                            std::size_t const instanceIndex,
+                            std::size_t *const position);
+
+int getOptionCount(ArgParserT const *const handle,
+                   std::string const &argLongForm, std::size_t *const count);
+
+int getOptionInstancePosition(ArgParserT const *const handle,
+                              std::string const &argLongForm,
+                              std::size_t const instanceIndex,
+                              std::size_t *const position);
+
+int getOptionInstanceValue(ArgParserT const *const handle,
+                           std::string const &argLongForm,
+                           std::size_t const instanceIndex,
+                           std::string *const value);
+
+int getFreeValueCount(ArgParserT const *const handle, std::size_t *const count);
+
+int getFreeValueInstancePosition(ArgParserT const *const handle,
+                                 std::size_t const instanceIndex,
+                                 std::size_t *const position);
+
+int getFreeValueInstanceValue(ArgParserT const *const handle,
+                              std::size_t const instanceIndex,
+                              std::string *const value);
 } // namespace ap
