@@ -25,6 +25,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <string>
 #include <vector>
 #include <list>
+#include <memory>
 
 namespace ap {
 enum class ModeT { Strict, Lenient };
