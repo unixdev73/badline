@@ -23,29 +23,48 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <memory>
 
 namespace re::Result {
-constexpr int Success = 0;
-constexpr int ErrorNullptrParameter = 1;
-constexpr int ErrorFailedToInitGLFW = 2;
-constexpr int ErrorMemoryAllocationFailure = 3;
-constexpr int ErrorVulkanInstanceCreationFailure = 4;
-constexpr int ErrorNoVulkanDevicesAvailable = 5;
-constexpr int ErrorVulkanDeviceCreationFailure = 6;
-constexpr int ErrorVulkanWindowCreationFailure = 7;
+enum Type {
+  Success,
+  ErrorNullptrHandle,
+  ErrorNullptrWindow,
+  ErrorFailedToInitGLFW,
+  ErrorMemoryAllocationFailure,
+  ErrorVulkanInstanceCreationFailure,
+  ErrorNoVulkanDevicesAvailable,
+  ErrorVulkanDeviceCreationFailure,
+  ErrorGLFWindowCreationFailure,
+  ErrorVulkanSurfaceCreationFailure,
+  ErrorPresentModesQueryFailure,
+  ErrorPresentModesFillFailure,
+  ErrorRequestedPresentModeNotAvailable,
+  ErrorSurfaceCapabilitiesQueryFailure,
+  ErrorRequestedSurfaceWidthTooLarge,
+  ErrorRequestedSurfaceHeightTooLarge,
+  ErrorColorAttachmentBitNotSupported,
+  ErrorSurfaceFormatQueryFailure,
+  ErrorSurfaceFormatFillFailure,
+  ErrorNoSurfaceFormatsAvailable,
+  ErrorVulkanSwapchainCreationFailure,
+  ErrorSwapchainImageQueryFailure,
+  ErrorSwapchainImageFillFailure
+};
 } // namespace re::Result
 
 namespace re {
 struct RenderEngineT;
-using RenderEngine = RenderEngineT *;
 
 using UniqueRenderEngine =
-    std::unique_ptr<RenderEngineT, void (*)(RenderEngine const)>;
+    std::unique_ptr<RenderEngineT, void (*)(RenderEngineT *const)>;
 
-int createRenderEngine(RenderEngine *const, std::string const &appName,
+int createRenderEngine(RenderEngineT **const handle, std::string const &appName,
                        bool debug);
-void destroyRenderEngine(RenderEngine const);
+
+void destroyRenderEngine(RenderEngineT const *const handle);
+
 UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug);
 
-int createWindow(RenderEngine const, uint32_t width, uint32_t height);
+int createWindow(RenderEngineT *const handle, uint32_t const width,
+                 uint32_t const height);
 
-int run(RenderEngine const);
+int run(RenderEngineT *const handle);
 } // namespace re

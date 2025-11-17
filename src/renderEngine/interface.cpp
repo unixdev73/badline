@@ -23,17 +23,10 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <iostream>
 #include <string>
 
-#define MCR_LOG(on, msg)                                                       \
-  if (on)                                                                      \
-    std::cerr << "Error: " << __func__ << ": " << msg << std::endl;
-
 namespace re {
-int run(RenderEngine const engine) {
-  bool const dbg = engine->instance.debug;
-  if (!engine->window.handle) {
-    MCR_LOG(dbg, "The window is not initialized.");
-    return Result::ErrorNullptrParameter;
-  }
+int run(RenderEngineT *const engine) {
+  if (!engine->window.handle)
+    return Result::ErrorNullptrWindow;
 
   while (!glfwWindowShouldClose(engine->window.handle.get())) {
     glfwPollEvents();
@@ -45,17 +38,15 @@ int run(RenderEngine const engine) {
   return Result::Success;
 }
 
-int createWindow(RenderEngine const engine, uint32_t width, uint32_t height) {
+int createWindow(RenderEngineT *const engine, uint32_t const width,
+                 uint32_t const height) {
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-  bool const dbg = engine->instance.debug;
 
   GLFWwindow *win =
       glfwCreateWindow(width, height, engine->instance.title.c_str(), 0, 0);
-  if (!win) {
-    MCR_LOG(dbg, "Failed to create GLFW window.");
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+  if (!win)
+    return Result::ErrorGLFWindowCreationFailure;
 
   engine->window.handle = {win, [](GLFWwindow *const ptr) {
                              if (ptr)
@@ -67,11 +58,9 @@ int createWindow(RenderEngine const engine, uint32_t width, uint32_t height) {
   VkSurfaceKHR surf{};
   if (auto result =
           glfwCreateWindowSurface(engine->instance.handle.get(), win, 0, &surf);
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Failed to create the window surface with error code: " +
-                     std::to_string(result));
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+      result != VK_SUCCESS)
+    return Result::ErrorVulkanSurfaceCreationFailure;
+
   auto inst = engine->instance.handle.get();
   engine->window.surface = {surf, [inst](VkSurfaceKHR_T *const ptr) {
                               if (ptr)
@@ -83,21 +72,15 @@ int createWindow(RenderEngine const engine, uint32_t width, uint32_t height) {
   if (auto result = vkGetPhysicalDeviceSurfacePresentModesKHR(
           engine->device.identifier, engine->window.surface.get(), &count,
           nullptr);
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Failed to query present modes with code: " +
-                     std::to_string(result));
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+      result != VK_SUCCESS)
+    return Result::ErrorPresentModesQueryFailure;
 
   engine->window.presentModes.resize(count);
   if (auto result = vkGetPhysicalDeviceSurfacePresentModesKHR(
           engine->device.identifier, engine->window.surface.get(), &count,
           engine->window.presentModes.data());
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Failed to fill queried present modes with code: " +
-                     std::to_string(result));
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+      result != VK_SUCCESS)
+    return Result::ErrorPresentModesFillFailure;
 
   bool found = false;
   for (auto mode : engine->window.presentModes) {
@@ -106,20 +89,14 @@ int createWindow(RenderEngine const engine, uint32_t width, uint32_t height) {
       break;
     }
   }
-  if (!found) {
-    MCR_LOG(dbg, "The requested present mode is not available: " +
-                     std::to_string(engine->window.presentMode));
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+  if (!found)
+    return Result::ErrorRequestedPresentModeNotAvailable;
 
   if (auto result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
           engine->device.identifier, engine->window.surface.get(),
           &engine->window.surfaceCaps);
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Failed to query surface capabilities with error code: " +
-                     std::to_string(engine->window.presentMode));
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+      result != VK_SUCCESS)
+    return Result::ErrorSurfaceCapabilitiesQueryFailure;
 
   auto numberOfImages = engine->window.surfaceCaps.minImageCount + 1;
   if ((engine->window.surfaceCaps.maxImageCount > 0) &&
@@ -127,44 +104,27 @@ int createWindow(RenderEngine const engine, uint32_t width, uint32_t height) {
     numberOfImages = engine->window.surfaceCaps.maxImageCount;
   }
 
-  if (engine->window.width > engine->window.surfaceCaps.maxImageExtent.width) {
-    MCR_LOG(dbg, "The requested width of the surface is too great: " +
-                     std::to_string(engine->window.width) + " > " +
-                     std::to_string(
-                         engine->window.surfaceCaps.maxImageExtent.width));
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+  if (engine->window.width > engine->window.surfaceCaps.maxImageExtent.width)
+    return Result::ErrorRequestedSurfaceWidthTooLarge;
 
-  if (engine->window.height >
-      engine->window.surfaceCaps.maxImageExtent.height) {
-    MCR_LOG(dbg, "The requested height of the surface is too great: " +
-                     std::to_string(engine->window.height) + " > " +
-                     std::to_string(
-                         engine->window.surfaceCaps.maxImageExtent.height));
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+  if (engine->window.height > engine->window.surfaceCaps.maxImageExtent.height)
+    return Result::ErrorRequestedSurfaceHeightTooLarge;
 
   if (!(engine->window.surfaceCaps.supportedUsageFlags &
-        VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) {
-    MCR_LOG(dbg, "The surface does not support the color attachment bit.");
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+        VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+    return Result::ErrorColorAttachmentBitNotSupported;
 
   if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
           engine->device.identifier, engine->window.surface.get(), &count, 0);
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Querying the surface formats failed");
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+      result != VK_SUCCESS)
+    return Result::ErrorSurfaceFormatQueryFailure;
 
   engine->window.surfaceFormats.resize(count);
   if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
           engine->device.identifier, engine->window.surface.get(), &count,
           engine->window.surfaceFormats.data());
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Filling the surface formats failed");
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+      result != VK_SUCCESS)
+    return Result::ErrorSurfaceFormatQueryFailure;
 
   if ((1 == engine->window.surfaceFormats.size()) &&
       (VK_FORMAT_UNDEFINED == engine->window.surfaceFormats[0].format)) {
@@ -172,10 +132,8 @@ int createWindow(RenderEngine const engine, uint32_t width, uint32_t height) {
     engine->window.surfaceFormat.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
   } else if (engine->window.surfaceFormats.size()) {
     engine->window.surfaceFormat = engine->window.surfaceFormats[0];
-  } else {
-    MCR_LOG(dbg, "No surface formats available.");
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+  } else
+    return Result::ErrorNoSurfaceFormatsAvailable;
 
   VkSwapchainCreateInfoKHR swpInfo{};
   swpInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -197,11 +155,8 @@ int createWindow(RenderEngine const engine, uint32_t width, uint32_t height) {
   VkSwapchainKHR swapchain{};
   if (auto result = vkCreateSwapchainKHR(engine->device.handle.get(), &swpInfo,
                                          0, &swapchain);
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Creating the swapchain failed with error code: " +
-                     std::to_string(result));
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+      result != VK_SUCCESS)
+    return Result::ErrorVulkanSwapchainCreationFailure;
 
   auto dev = engine->device.handle.get();
   engine->window.swapchain = {swapchain, [dev](VkSwapchainKHR_T *const ptr) {
@@ -211,81 +166,67 @@ int createWindow(RenderEngine const engine, uint32_t width, uint32_t height) {
   if (auto result =
           vkGetSwapchainImagesKHR(engine->device.handle.get(),
                                   engine->window.swapchain.get(), &count, 0);
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Failed to query swapchain images.");
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+      result != VK_SUCCESS)
+    return Result::ErrorSwapchainImageQueryFailure;
 
   engine->window.swapImages.resize(count);
 
   if (auto result = vkGetSwapchainImagesKHR(
           engine->device.handle.get(), engine->window.swapchain.get(), &count,
           engine->window.swapImages.data());
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Failed to retrieve swapchain images.");
-    return Result::ErrorVulkanWindowCreationFailure;
-  }
+      result != VK_SUCCESS)
+    return Result::ErrorSwapchainImageFillFailure;
 
   return Result::Success;
 }
 
-int createRenderEngine(RenderEngine *const engine, std::string const &appName,
+int createRenderEngine(RenderEngineT **const handle, std::string const &appName,
                        bool debug) {
-  if (!engine) {
-    MCR_LOG(debug, "The engine parameter is a nullptr.");
-    return Result::ErrorNullptrParameter;
-  }
+  if (!handle)
+    return Result::ErrorNullptrHandle;
 
-  if (glfwInit() != GLFW_TRUE) {
-    MCR_LOG(debug, "GLFW initialization failed.");
+  if (glfwInit() != GLFW_TRUE)
     return Result::ErrorFailedToInitGLFW;
-  }
 
-  *engine = new RenderEngineT{};
-  if (!*engine) {
-    MCR_LOG(debug, "Memory allocation for a render engine instance failed.");
+  *handle = new RenderEngineT{};
+  if (!*handle)
     return Result::ErrorMemoryAllocationFailure;
-  }
 
   VkInstance instance{};
   VkResult code{};
-  if (auto err = createVulkanInstance(appName, debug, &instance, &code); err) {
-    MCR_LOG(debug, "Creating Vkinstance failed, code: " + std::to_string(code));
-    return err;
-  }
+  if (auto err = createVulkanInstance(appName, debug, &instance, &code); err)
+    return Result::ErrorVulkanInstanceCreationFailure;
 
-  (*engine)->instance.handle = {
+  (*handle)->instance.handle = {
       instance, [](VkInstance ptr) { vkDestroyInstance(ptr, nullptr); }};
-  (*engine)->instance.title = appName;
-  (*engine)->instance.debug = debug;
+  (*handle)->instance.title = appName;
+  (*handle)->instance.debug = debug;
 
   VkPhysicalDevice phy{};
   VkDevice dev{};
   VkQueue graph{}, pres{};
   if (auto err = selectOptimalGPU(instance, debug, &phy, &dev, &pres, &graph);
-      err) {
-    MCR_LOG(debug, "Failed to select a GPU");
-    return Result::ErrorVulkanDeviceCreationFailure;
-  }
+      err)
+    return err;
 
-  (*engine)->device.identifier = phy;
-  (*engine)->device.handle = {dev, [](VkDevice ptr) {
+  (*handle)->device.identifier = phy;
+  (*handle)->device.handle = {dev, [](VkDevice ptr) {
                                 vkDeviceWaitIdle(ptr);
                                 vkDestroyDevice(ptr, 0);
                               }};
-  (*engine)->device.graphics = graph;
-  (*engine)->device.presentation = pres;
+  (*handle)->device.graphics = graph;
+  (*handle)->device.presentation = pres;
 
   return Result::Success;
 }
 
-void destroyRenderEngine(RenderEngine const engine) {
-  delete engine;
+void destroyRenderEngine(RenderEngineT *const handle) {
+  delete handle;
   glfwTerminate();
 }
 
 UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug) {
-  RenderEngine engine{};
+  RenderEngineT *engine{};
   createRenderEngine(&engine, appName, debug);
   return UniqueRenderEngine{engine, destroyRenderEngine};
 }
@@ -329,9 +270,9 @@ int createVulkanInstance(std::string const &appName, bool debug,
     }
 
     if (!isAvailable) {
-      MCR_LOG(debug, "The requested instance extension: '" + req +
-                         "' "
-                         "is not available.");
+      // empty for now, TODO: store the list of missing extensions
+      // somewhere in the engine structure and privide an interface
+      // to query the list.
     }
   }
 
@@ -376,10 +317,9 @@ int selectOptimalGPU(VkInstance const instance, bool const dbg,
   std::unordered_map<VkPhysicalDevice, QueueInfoDB> devQFams{};
 
   vkEnumeratePhysicalDevices(instance, &count, 0);
-  if (!count) {
-    MCR_LOG(dbg, "No devices that support Vulkan were found.\n");
+  if (!count)
     return Result::ErrorNoVulkanDevicesAvailable;
-  }
+
   devs.resize(count);
   vkEnumeratePhysicalDevices(instance, &count, devs.data());
 
@@ -478,11 +418,9 @@ int selectOptimalGPU(VkInstance const instance, bool const dbg,
   devInfo.pEnabledFeatures = &reqF;
 
   if (auto result = vkCreateDevice(currentBest, &devInfo, 0, dev);
-      result != VK_SUCCESS) {
-    MCR_LOG(dbg, "Failed to create logical device with error: " +
-                     std::to_string(result));
+      result != VK_SUCCESS)
     return Result::ErrorVulkanDeviceCreationFailure;
-  }
+
   *phy = currentBest;
 
   vkGetDeviceQueue(*dev, qCreateInfos.front().queueFamilyIndex, 0, graphicsQ);

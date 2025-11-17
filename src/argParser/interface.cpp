@@ -35,6 +35,12 @@ int createArgParser(ArgParserT **const handle) {
   return Result::Success;
 }
 
+UniqueArgParser createArgParser() {
+  ArgParserT *handle{};
+  createArgParser(&handle);
+  return {handle, destroyArgParser};
+}
+
 void destroyArgParser(ArgParserT const *const handle) { delete handle; }
 
 int addFlag(ArgParserT *const handle, std::string const &argLongForm,

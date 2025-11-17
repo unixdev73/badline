@@ -62,6 +62,10 @@ int createArgParser(ArgParserT **const handle);
 
 void destroyArgParser(ArgParserT const *const handle);
 
+using UniqueArgParser =
+    std::unique_ptr<ArgParserT, void (*)(ArgParserT const *const)>;
+UniqueArgParser createArgParser();
+
 int addFlag(ArgParserT *const handle, std::string const &argLongForm,
             char const argShortForm = 0);
 
