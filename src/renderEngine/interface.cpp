@@ -24,6 +24,46 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <string>
 
 namespace re {
+int createRenderEngine(RenderEngineT **const handle, std::string const &appName,
+                       bool debug) {
+  if (!handle)
+    return Result::ErrorNullptrHandle;
+
+  if (glfwInit() != GLFW_TRUE)
+    return Result::ErrorFailedToInitGLFW;
+
+  *handle = new RenderEngineT{};
+  if (!*handle)
+    return Result::ErrorMemoryAllocationFailure;
+
+  VkInstance instance{};
+  VkResult code{};
+  if (auto err = createVulkanInstance(appName, debug, &instance, &code); err)
+    return Result::ErrorVulkanInstanceCreationFailure;
+
+  (*handle)->instance.handle = {
+      instance, [](VkInstance ptr) { vkDestroyInstance(ptr, nullptr); }};
+  (*handle)->instance.title = appName;
+  (*handle)->instance.debug = debug;
+
+  VkPhysicalDevice phy{};
+  VkDevice dev{};
+  VkQueue graph{}, pres{};
+  if (auto err = selectOptimalGPU(instance, debug, &phy, &dev, &pres, &graph);
+      err)
+    return err;
+
+  (*handle)->device.identifier = phy;
+  (*handle)->device.handle = {dev, [](VkDevice ptr) {
+                                vkDeviceWaitIdle(ptr);
+                                vkDestroyDevice(ptr, 0);
+                              }};
+  (*handle)->device.graphics = graph;
+  (*handle)->device.presentation = pres;
+
+  return Result::Success;
+}
+
 int run(RenderEngineT *const engine) {
   if (!engine->window.handle)
     return Result::ErrorNullptrWindow;
@@ -176,46 +216,6 @@ int createWindow(RenderEngineT *const engine, uint32_t const width,
           engine->window.swapImages.data());
       result != VK_SUCCESS)
     return Result::ErrorSwapchainImageFillFailure;
-
-  return Result::Success;
-}
-
-int createRenderEngine(RenderEngineT **const handle, std::string const &appName,
-                       bool debug) {
-  if (!handle)
-    return Result::ErrorNullptrHandle;
-
-  if (glfwInit() != GLFW_TRUE)
-    return Result::ErrorFailedToInitGLFW;
-
-  *handle = new RenderEngineT{};
-  if (!*handle)
-    return Result::ErrorMemoryAllocationFailure;
-
-  VkInstance instance{};
-  VkResult code{};
-  if (auto err = createVulkanInstance(appName, debug, &instance, &code); err)
-    return Result::ErrorVulkanInstanceCreationFailure;
-
-  (*handle)->instance.handle = {
-      instance, [](VkInstance ptr) { vkDestroyInstance(ptr, nullptr); }};
-  (*handle)->instance.title = appName;
-  (*handle)->instance.debug = debug;
-
-  VkPhysicalDevice phy{};
-  VkDevice dev{};
-  VkQueue graph{}, pres{};
-  if (auto err = selectOptimalGPU(instance, debug, &phy, &dev, &pres, &graph);
-      err)
-    return err;
-
-  (*handle)->device.identifier = phy;
-  (*handle)->device.handle = {dev, [](VkDevice ptr) {
-                                vkDeviceWaitIdle(ptr);
-                                vkDestroyDevice(ptr, 0);
-                              }};
-  (*handle)->device.graphics = graph;
-  (*handle)->device.presentation = pres;
 
   return Result::Success;
 }
@@ -428,6 +428,19 @@ int selectOptimalGPU(VkInstance const instance, bool const dbg,
   if (qdb.graphics.famIndex != qdb.present.famIndex)
     vkGetDeviceQueue(*dev, qCreateInfos.back().queueFamilyIndex, 0, presentQ);
 
+  return Result::Success;
+}
+
+int getErrorMessage(RenderEngineT const *const handle,
+                    std::string *const message) {
+  if (!handle)
+    return Result::ErrorNullptrHandle;
+  if (!message)
+    return Result::ErrorNullptrMessage;
+  if (handle->errorMessage.empty())
+    return Result::ErrorNoErrorMessage;
+
+  *message = handle->errorMessage;
   return Result::Success;
 }
 } // namespace re

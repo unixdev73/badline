@@ -27,6 +27,7 @@ enum Type {
   Success,
   ErrorNullptrHandle,
   ErrorNullptrWindow,
+  ErrorNullptrMessage,
   ErrorFailedToInitGLFW,
   ErrorMemoryAllocationFailure,
   ErrorVulkanInstanceCreationFailure,
@@ -46,7 +47,8 @@ enum Type {
   ErrorNoSurfaceFormatsAvailable,
   ErrorVulkanSwapchainCreationFailure,
   ErrorSwapchainImageQueryFailure,
-  ErrorSwapchainImageFillFailure
+  ErrorSwapchainImageFillFailure,
+  ErrorNoErrorMessage
 };
 } // namespace re::Result
 
@@ -67,4 +69,7 @@ int createWindow(RenderEngineT *const handle, uint32_t const width,
                  uint32_t const height);
 
 int run(RenderEngineT *const handle);
+
+int getErrorMessage(RenderEngineT const *const handle,
+                    std::string *const message);
 } // namespace re

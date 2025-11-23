@@ -19,6 +19,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <vulkan/vulkan.h>
+#include "vk_mem_alloc.h"
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <string>
@@ -72,6 +73,8 @@ struct RenderEngineT {
   InstanceT instance{};
   DeviceT device{};
   WindowT window{};
+  VmaAllocator allocator{};
+  std::string errorMessage{};
 };
 
 int createVulkanInstance(std::string const &appName, bool validate,

@@ -23,6 +23,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/argParser.hpp>
 #include <iostream>
 #include <vector>
+
 int main(int const argc, char const *const *const argv) {
   try {
     if (argc == 1)
