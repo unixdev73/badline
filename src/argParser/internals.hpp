@@ -181,4 +181,6 @@ int fillParsingDatabase(ParsingDatabaseT *const database);
 
 int split(std::string const *const input, char const delimiter,
           std::pair<std::string, std::string> *const output);
+
+int checkThatAllOptionsAreAssigned(ArgParserT const * const handle);
 } // namespace ap

@@ -139,7 +139,7 @@ int parse(ArgParserT *const handle, char const *const *const input,
       return r;
   }
 
-  return Result::Success;
+  return checkThatAllOptionsAreAssigned(handle);
 }
 
 int getErrorPosition(ArgParserT *const handle, std::size_t *const output) {

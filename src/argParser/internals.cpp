@@ -449,6 +449,18 @@ int split(std::string const *const input, char const delimiter,
   return Result::Success;
 }
 
+int checkThatAllOptionsAreAssigned(ArgParserT const * const handle) {
+	auto const & opts = handle->options.longForm;
+	for (auto const& opt : opts) {
+		auto const& instances = *opt.second;
+		for (auto const& inst : instances)
+			if (inst.value.empty())
+				return Result::ErrorOptionRequiresValue;
+	}
+
+	return Result::Success;
+}
+
 int GrammarRuleT::toString(std::size_t const id, std::string *const output) {
   switch (id) {
   case Identifier::ShortArgPrefix:
