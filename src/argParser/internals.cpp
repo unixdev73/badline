@@ -23,8 +23,8 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <list>
 
 namespace ap {
-int initParseChart(ParsingDatabaseT *const database,
-                   std::string const *const input) {
+Result initParseChart(ParsingDatabaseT *const database,
+                      std::string const *const input) {
   database->back = std::vector<std::vector<std::vector<std::vector<BackPtrT>>>>{
       input->size(), std::vector<std::vector<std::vector<BackPtrT>>>{
                          input->size(), std::vector<std::vector<BackPtrT>>(
@@ -64,8 +64,8 @@ int initParseChart(ParsingDatabaseT *const database,
   return Result::Success;
 }
 
-int tracePostorderPath(ParsingDatabaseT *const database,
-                       std::size_t const variant) {
+Result tracePostorderPath(ParsingDatabaseT *const database,
+                          std::size_t const variant) {
   std::size_t const start = GrammarRuleT::Identifier::Start;
   std::size_t const row = database->back.size() - 1;
 
@@ -111,14 +111,15 @@ int tracePostorderPath(ParsingDatabaseT *const database,
   return Result::Success;
 }
 
-int handleArgList(ArgParserT *const handle, std::size_t const position,
-                  std::string const *const token) {
+Result handleArgList(ArgParserT *const handle,
+                     std::size_t const position,
+                     std::string const *const token) {
   auto const &ti = handle->database.tokenInfo;
   auto const &op = handle->options;
   auto const &fl = handle->flags;
   auto &to = handle->targetOption;
 
-  int result = Result::Success;
+  Result result = Result::Success;
 
   for (std::size_t i = 0; i < ti.argName.size() - 1; ++i) {
     if (!fl.shortForm.contains(ti.argName[i])) {
@@ -160,7 +161,7 @@ int handleArgList(ArgParserT *const handle, std::size_t const position,
   return result;
 }
 
-int handleLongArg(ArgParserT *const handle, std::size_t const position) {
+Result handleLongArg(ArgParserT *const handle, std::size_t const position) {
   auto const &ti = handle->database.tokenInfo;
   auto const &op = handle->options;
   auto const &fl = handle->flags;
@@ -185,7 +186,7 @@ int handleLongArg(ArgParserT *const handle, std::size_t const position) {
   return Result::Success;
 }
 
-int handleShortArg(ArgParserT *const handle, std::size_t const position) {
+Result handleShortArg(ArgParserT *const handle, std::size_t const position) {
   auto const &ti = handle->database.tokenInfo;
   auto const &op = handle->options;
   auto const &fl = handle->flags;
@@ -210,8 +211,9 @@ int handleShortArg(ArgParserT *const handle, std::size_t const position) {
   return Result::Success;
 }
 
-int updateArguments(ArgParserT *const handle, std::string const *const token,
-                    std::size_t const position) {
+Result updateArguments(ArgParserT *const handle,
+                       std::string const *const token,
+                       std::size_t const position) {
   auto const &g = handle->database.grammar;
 
   for (auto const &[rule, info] : handle->database.serialized) {
@@ -246,7 +248,8 @@ int updateArguments(ArgParserT *const handle, std::string const *const token,
   return Result::Success;
 }
 
-int parseCYK(ParsingDatabaseT *const database, std::string const *const input) {
+Result parseCYK(ParsingDatabaseT *const database,
+                std::string const *const input) {
   if (auto code = initParseChart(database, input); code != Result::Success)
     return code;
 
@@ -281,7 +284,7 @@ int parseCYK(ParsingDatabaseT *const database, std::string const *const input) {
   return Result::ErrorStartSymbolNotDerivedFromInput;
 }
 
-int createGrammar(ParsingDatabaseT *const database) {
+Result createGrammar(ParsingDatabaseT *const database) {
   using R = GrammarRuleT::Identifier;
   auto &g = database->grammar;
   g.resize(R::Size);
@@ -371,7 +374,7 @@ int createGrammar(ParsingDatabaseT *const database) {
   return Result::Success;
 }
 
-int fillParsingDatabase(ParsingDatabaseT *const database) {
+Result fillParsingDatabase(ParsingDatabaseT *const database) {
   database->termMapping.reserve(500);
 
   fillParsingDatabaseWithAlphabet(database);
@@ -382,7 +385,7 @@ int fillParsingDatabase(ParsingDatabaseT *const database) {
   return Result::Success;
 }
 
-int fillParsingDatabaseWithMisc(ParsingDatabaseT *const database) {
+Result fillParsingDatabaseWithMisc(ParsingDatabaseT *const database) {
   auto &mapping = database->termMapping;
   using R = GrammarRuleT::Identifier;
   mapping.push_back({R::ShortArgPrefix, '-'});
@@ -405,7 +408,7 @@ int fillParsingDatabaseWithMisc(ParsingDatabaseT *const database) {
   return Result::Success;
 }
 
-int fillParsingDatabaseWithDigits(ParsingDatabaseT *const database) {
+Result fillParsingDatabaseWithDigits(ParsingDatabaseT *const database) {
   std::string const digits{"0123456789"};
   auto &mapping = database->termMapping;
 
@@ -416,7 +419,7 @@ int fillParsingDatabaseWithDigits(ParsingDatabaseT *const database) {
   return Result::Success;
 }
 
-int fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database) {
+Result fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database) {
   std::string const alphabet{"abcdefghijklmnopqrstuvwxyz"};
   auto &mapping = database->termMapping;
 
@@ -434,8 +437,9 @@ int fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database) {
   return Result::Success;
 }
 
-int split(std::string const *const input, char const delimiter,
-          std::pair<std::string, std::string> *const output) {
+Result split(std::string const *const input,
+             char const delimiter,
+             std::pair<std::string, std::string> *const output) {
   if (!input->size())
     return Result::Success;
 
@@ -449,19 +453,19 @@ int split(std::string const *const input, char const delimiter,
   return Result::Success;
 }
 
-int checkThatAllOptionsAreAssigned(ArgParserT const * const handle) {
-	auto const & opts = handle->options.longForm;
-	for (auto const& opt : opts) {
-		auto const& instances = *opt.second;
-		for (auto const& inst : instances)
-			if (inst.value.empty())
-				return Result::ErrorOptionRequiresValue;
-	}
+Result checkThatAllOptionsAreAssigned(ArgParserT const *const handle) {
+  auto const &opts = handle->options.longForm;
+  for (auto const &opt : opts) {
+    auto const &instances = *opt.second;
+    for (auto const &inst : instances)
+      if (inst.value.empty())
+        return Result::ErrorOptionRequiresValue;
+  }
 
-	return Result::Success;
+  return Result::Success;
 }
 
-int GrammarRuleT::toString(std::size_t const id, std::string *const output) {
+Result GrammarRuleT::toString(std::size_t const id, std::string *const output) {
   switch (id) {
   case Identifier::ShortArgPrefix:
     *output = "ShortArgPrefix";

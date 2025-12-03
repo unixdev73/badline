@@ -20,6 +20,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
+#include <badline/argParser.hpp>
 #include <unordered_map>
 #include <functional>
 #include <string>
@@ -86,13 +87,15 @@ struct GrammarRuleT {
     Size
   };
 
-  static int toString(std::size_t const id, std::string *const output);
+  static Result toString(std::size_t const id, std::string *const output);
 };
 
 struct GrammarRuleVariantT {
   std::size_t nonTermA{}, nonTermB{};
-  std::function<void(std::string const &, std::size_t const beginA,
-                     std::size_t const endA, std::size_t const beginB,
+  std::function<void(std::string const &,
+                     std::size_t const beginA,
+                     std::size_t const endA,
+                     std::size_t const beginB,
                      std::size_t const endB)>
       semanticAction{};
 };
@@ -166,21 +169,24 @@ struct ArgParserT {
 } // namespace ap
 
 namespace ap {
-int updateArguments(ArgParserT *const handle, std::string const *const token,
-                    std::size_t const position);
-int tracePostorderPath(ParsingDatabaseT *const database,
-                       std::size_t const variant);
-int initParseChart(ParsingDatabaseT *const database,
-                   std::string const *const input);
-int parseCYK(ParsingDatabaseT *const database, std::string const *const input);
+Result updateArguments(ArgParserT *const handle,
+                       std::string const *const token,
+                       std::size_t const position);
+Result tracePostorderPath(ParsingDatabaseT *const database,
+                          std::size_t const variant);
+Result initParseChart(ParsingDatabaseT *const database,
+                      std::string const *const input);
+Result parseCYK(ParsingDatabaseT *const database,
+                std::string const *const input);
 
-int fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database);
-int fillParsingDatabaseWithDigits(ParsingDatabaseT *const database);
-int fillParsingDatabaseWithMisc(ParsingDatabaseT *const database);
-int fillParsingDatabase(ParsingDatabaseT *const database);
+Result fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database);
+Result fillParsingDatabaseWithDigits(ParsingDatabaseT *const database);
+Result fillParsingDatabaseWithMisc(ParsingDatabaseT *const database);
+Result fillParsingDatabase(ParsingDatabaseT *const database);
 
-int split(std::string const *const input, char const delimiter,
-          std::pair<std::string, std::string> *const output);
+Result split(std::string const *const input,
+             char const delimiter,
+             std::pair<std::string, std::string> *const output);
 
-int checkThatAllOptionsAreAssigned(ArgParserT const * const handle);
+Result checkThatAllOptionsAreAssigned(ArgParserT const *const handle);
 } // namespace ap

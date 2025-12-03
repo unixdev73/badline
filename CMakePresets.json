@@ -1,5 +1,5 @@
 {
-  "version" : 10,
+  "version": 10,
   "cmakeMinimumRequired": {
     "major": 3,
     "minor": 25,
@@ -16,7 +16,7 @@
 
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "BUILD_TARGETS": "all"
+        "BUILD_ALL_TARGETS": "true"
       }
     }
   ]

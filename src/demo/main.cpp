@@ -19,7 +19,6 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/renderEngine.hpp>
-#include <badline/scopedLogger.hpp>
 #include <badline/argParser.hpp>
 #include <iostream>
 #include <vector>
@@ -29,8 +28,8 @@ int main(int const argc, char const *const *const argv) {
     if (argc == 1)
       return 1;
 
-    ap::ArgParserT *handle{};
-    ap::createArgParser(&handle);
+    auto parser = ap::createArgParser();
+    ap::ArgParserT *handle = parser.get();
 
     std::vector<std::string> fid{};
     std::vector<std::string> oid{};
@@ -54,7 +53,7 @@ int main(int const argc, char const *const *const argv) {
     std::size_t const begin = 1;
     auto resultCode = ap::parse(handle, argv, begin, argc);
     std::string result{};
-    ap::Result::toString(resultCode, &result);
+    ap::toString(resultCode, &result);
     std::cout << "Parsing status: " << result;
     if (resultCode != ap::Result::Success) {
       std::size_t position{};
@@ -87,13 +86,12 @@ int main(int const argc, char const *const *const argv) {
 
     ap::getFreeValueCount(handle, &count);
     for (std::size_t i = 0; i < count; ++i) {
-      ap::getFreeValueInstanceValue(handle, i, &value);
+      ap::getFreeValueInstance(handle, i, &value);
       ap::getFreeValueInstancePosition(handle, i, &pos);
       std::cout << "free val instance: " << i << ": value: " << value
                 << " pos: " << pos << std::endl;
     }
 
-    ap::destroyArgParser(handle);
   } catch (std::exception const &e) {
     std::cerr << "Error: Caught exception: " << e.what() << std::endl;
   } catch (...) {

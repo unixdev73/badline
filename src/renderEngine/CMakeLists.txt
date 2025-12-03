@@ -8,6 +8,7 @@ target_compile_options(vulkanMemoryAllocator PRIVATE -w)
 add_library(renderEngine
 	interface.cpp
 )
+setCompileOptions(renderEngine)
 
 set(renderEngineLibList
 	vulkanMemoryAllocator

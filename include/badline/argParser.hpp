@@ -26,8 +26,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 namespace ap {
 struct ArgParserT;
 
-namespace Result {
-enum Type : int {
+enum class Result : int {
   Success,
 
   ErrorNullptrHandle,
@@ -47,7 +46,6 @@ enum Type : int {
 
   ErrorTermTokenNotValid,
   ErrorMemoryAllocationFailure,
-  ErrorResultCodeNotValid,
   ErrorRuleIdentifierNotValid,
   ErrorExpectedArgListToken,
 
@@ -56,10 +54,9 @@ enum Type : int {
   ErrorOptionRequiresValue
 };
 
-int toString(int const result, std::string *const output);
-} // namespace Result
+Result toString(Result const result, std::string *const output);
 
-int createArgParser(ArgParserT **const handle);
+Result createArgParser(ArgParserT **const handle);
 
 void destroyArgParser(ArgParserT const *const handle);
 
@@ -67,45 +64,52 @@ using UniqueArgParser =
     std::unique_ptr<ArgParserT, void (*)(ArgParserT const *const)>;
 UniqueArgParser createArgParser();
 
-int addFlag(ArgParserT *const handle, std::string const &argLongForm,
-            char const argShortForm = 0);
+Result addFlag(ArgParserT *const handle,
+               std::string const &argLongForm,
+               char const argShortForm = 0);
 
-int addOption(ArgParserT *const handle, std::string const &argLongForm,
-              char const argShortForm = 0);
+Result addOption(ArgParserT *const handle,
+                 std::string const &argLongForm,
+                 char const argShortForm = 0);
 
-int parse(ArgParserT *const handle, char const *const *const input,
-          std::size_t const begin, std::size_t const end);
+Result parse(ArgParserT *const handle,
+             char const *const *const input,
+             std::size_t const begin,
+             std::size_t const end);
 
-int getErrorPosition(ArgParserT *const handle, std::size_t *const output);
+Result getErrorPosition(ArgParserT *const handle, std::size_t *const output);
 
-int getFlagCount(ArgParserT const *const handle, std::string const &argLongForm,
-                 std::size_t *const count);
+Result getFlagCount(ArgParserT const *const handle,
+                    std::string const &argLongForm,
+                    std::size_t *const count);
 
-int getFlagInstancePosition(ArgParserT const *const handle,
-                            std::string const &argLongForm,
-                            std::size_t const instanceIndex,
-                            std::size_t *const position);
+Result getFlagInstancePosition(ArgParserT const *const handle,
+                               std::string const &argLongForm,
+                               std::size_t const instanceIndex,
+                               std::size_t *const position);
 
-int getOptionCount(ArgParserT const *const handle,
-                   std::string const &argLongForm, std::size_t *const count);
+Result getOptionCount(ArgParserT const *const handle,
+                      std::string const &argLongForm,
+                      std::size_t *const count);
 
-int getOptionInstancePosition(ArgParserT const *const handle,
-                              std::string const &argLongForm,
-                              std::size_t const instanceIndex,
-                              std::size_t *const position);
-
-int getOptionInstanceValue(ArgParserT const *const handle,
-                           std::string const &argLongForm,
-                           std::size_t const instanceIndex,
-                           std::string *const value);
-
-int getFreeValueCount(ArgParserT const *const handle, std::size_t *const count);
-
-int getFreeValueInstancePosition(ArgParserT const *const handle,
+Result getOptionInstancePosition(ArgParserT const *const handle,
+                                 std::string const &argLongForm,
                                  std::size_t const instanceIndex,
                                  std::size_t *const position);
 
-int getFreeValueInstanceValue(ArgParserT const *const handle,
+Result getOptionInstanceValue(ArgParserT const *const handle,
+                              std::string const &argLongForm,
                               std::size_t const instanceIndex,
                               std::string *const value);
+
+Result getFreeValueCount(ArgParserT const *const handle,
+                         std::size_t *const count);
+
+Result getFreeValueInstancePosition(ArgParserT const *const handle,
+                                    std::size_t const instanceIndex,
+                                    std::size_t *const position);
+
+Result getFreeValueInstance(ArgParserT const *const handle,
+                            std::size_t const instanceIndex,
+                            std::string *const value);
 } // namespace ap

@@ -22,7 +22,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include "internals.hpp"
 
 namespace ap {
-int createArgParser(ArgParserT **const handle) {
+Result createArgParser(ArgParserT **const handle) {
   if (!handle)
     return Result::ErrorNullptrHandle;
 
@@ -43,8 +43,9 @@ UniqueArgParser createArgParser() {
 
 void destroyArgParser(ArgParserT const *const handle) { delete handle; }
 
-int addFlag(ArgParserT *const handle, std::string const &argLongForm,
-            char const argShortForm) {
+Result addFlag(ArgParserT *const handle,
+               std::string const &argLongForm,
+               char const argShortForm) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (argLongForm.empty())
@@ -63,8 +64,9 @@ int addFlag(ArgParserT *const handle, std::string const &argLongForm,
   return Result::Success;
 }
 
-int addOption(ArgParserT *const handle, std::string const &argLongForm,
-              char const argShortForm) {
+Result addOption(ArgParserT *const handle,
+                 std::string const &argLongForm,
+                 char const argShortForm) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (argLongForm.empty())
@@ -83,8 +85,10 @@ int addOption(ArgParserT *const handle, std::string const &argLongForm,
   return Result::Success;
 }
 
-int parse(ArgParserT *const handle, char const *const *const input,
-          std::size_t const begin, std::size_t const end) {
+Result parse(ArgParserT *const handle,
+             char const *const *const input,
+             std::size_t const begin,
+             std::size_t const end) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (!input)
@@ -142,7 +146,7 @@ int parse(ArgParserT *const handle, char const *const *const input,
   return checkThatAllOptionsAreAssigned(handle);
 }
 
-int getErrorPosition(ArgParserT *const handle, std::size_t *const output) {
+Result getErrorPosition(ArgParserT *const handle, std::size_t *const output) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (!output)
@@ -151,8 +155,9 @@ int getErrorPosition(ArgParserT *const handle, std::size_t *const output) {
   return Result::Success;
 }
 
-int getFlagCount(ArgParserT const *const handle, std::string const &argLongForm,
-                 std::size_t *const count) {
+Result getFlagCount(ArgParserT const *const handle,
+                    std::string const &argLongForm,
+                    std::size_t *const count) {
   if (!handle)
     return Result::ErrorNullptrHandle;
 
@@ -167,10 +172,10 @@ int getFlagCount(ArgParserT const *const handle, std::string const &argLongForm,
   return Result::Success;
 }
 
-int getFlagInstancePosition(ArgParserT const *const handle,
-                            std::string const &argLongForm,
-                            std::size_t const instanceIndex,
-                            std::size_t *const position) {
+Result getFlagInstancePosition(ArgParserT const *const handle,
+                               std::string const &argLongForm,
+                               std::size_t const instanceIndex,
+                               std::size_t *const position) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (!position)
@@ -186,8 +191,9 @@ int getFlagInstancePosition(ArgParserT const *const handle,
   return Result::Success;
 }
 
-int getOptionCount(ArgParserT const *const handle,
-                   std::string const &argLongForm, std::size_t *const count) {
+Result getOptionCount(ArgParserT const *const handle,
+                      std::string const &argLongForm,
+                      std::size_t *const count) {
   if (!handle)
     return Result::ErrorNullptrHandle;
 
@@ -202,10 +208,10 @@ int getOptionCount(ArgParserT const *const handle,
   return Result::Success;
 }
 
-int getOptionInstancePosition(ArgParserT const *const handle,
-                              std::string const &argLongForm,
-                              std::size_t const instanceIndex,
-                              std::size_t *const position) {
+Result getOptionInstancePosition(ArgParserT const *const handle,
+                                 std::string const &argLongForm,
+                                 std::size_t const instanceIndex,
+                                 std::size_t *const position) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (!position)
@@ -221,10 +227,10 @@ int getOptionInstancePosition(ArgParserT const *const handle,
   return Result::Success;
 }
 
-int getOptionInstanceValue(ArgParserT const *const handle,
-                           std::string const &argLongForm,
-                           std::size_t const instanceIndex,
-                           std::string *const value) {
+Result getOptionInstanceValue(ArgParserT const *const handle,
+                              std::string const &argLongForm,
+                              std::size_t const instanceIndex,
+                              std::string *const value) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (!value)
@@ -240,8 +246,8 @@ int getOptionInstanceValue(ArgParserT const *const handle,
   return Result::Success;
 }
 
-int getFreeValueCount(ArgParserT const *const handle,
-                      std::size_t *const count) {
+Result getFreeValueCount(ArgParserT const *const handle,
+                         std::size_t *const count) {
   if (!handle)
     return Result::ErrorNullptrHandle;
 
@@ -252,9 +258,9 @@ int getFreeValueCount(ArgParserT const *const handle,
   return Result::Success;
 }
 
-int getFreeValueInstancePosition(ArgParserT const *const handle,
-                                 std::size_t const instanceIndex,
-                                 std::size_t *const position) {
+Result getFreeValueInstancePosition(ArgParserT const *const handle,
+                                    std::size_t const instanceIndex,
+                                    std::size_t *const position) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (!position)
@@ -266,9 +272,9 @@ int getFreeValueInstancePosition(ArgParserT const *const handle,
   return Result::Success;
 }
 
-int getFreeValueInstanceValue(ArgParserT const *const handle,
-                              std::size_t const instanceIndex,
-                              std::string *const value) {
+Result getFreeValueInstance(ArgParserT const *const handle,
+                            std::size_t const instanceIndex,
+                            std::string *const value) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (!value)
@@ -281,70 +287,71 @@ int getFreeValueInstanceValue(ArgParserT const *const handle,
 }
 } // namespace ap
 
-namespace ap::Result {
-int toString(int const result, std::string *const output) {
+namespace ap {
+Result toString(Result const result, std::string *const output) {
   switch (result) {
-  case Success:
+  case Result::Success:
     *output = "Success";
     break;
-  case ErrorNullptrHandle:
+  case Result::ErrorNullptrHandle:
     *output = "ErrorNullptrHandle";
     break;
-  case ErrorNullptrInput:
+  case Result::ErrorNullptrInput:
     *output = "ErrorNullptrInput";
     break;
-  case ErrorNullptrCount:
+  case Result::ErrorNullptrCount:
     *output = "ErrorNullptrCount";
     break;
-  case ErrorNullptrPosition:
+  case Result::ErrorNullptrPosition:
     *output = "ErrorNullptrPosition";
     break;
-  case ErrorNullptrValue:
+  case Result::ErrorNullptrValue:
     *output = "ErrorNullptrValue";
     break;
-  case ErrorNullptrOutput:
+  case Result::ErrorNullptrOutput:
     *output = "ErrorNullptrOutput";
     break;
-  case ErrorArgLongFormNotUnique:
+  case Result::ErrorArgLongFormNotUnique:
     *output = "ErrorArgLongFormNotUnique";
     break;
-  case ErrorArgShortFormNotUnique:
+  case Result::ErrorArgShortFormNotUnique:
     *output = "ErrorArgShortFormNotUnique";
     break;
-  case ErrorArgLongFormNotValid:
+  case Result::ErrorArgLongFormNotValid:
     *output = "ErrorArgLongFormNotValid";
     break;
-  case ErrorArgShortFormNotValid:
+  case Result::ErrorArgShortFormNotValid:
     *output = "ErrorArgShortFormNotValid";
     break;
-  case ErrorBeginEndRangeNotValid:
+  case Result::ErrorBeginEndRangeNotValid:
     *output = "ErrorBeginEndRangeNotValid";
     break;
-  case ErrorInstanceIndexNotValid:
+  case Result::ErrorInstanceIndexNotValid:
     *output = "ErrorInstanceIndexNotValid";
     break;
-  case ErrorTermTokenNotValid:
+  case Result::ErrorTermTokenNotValid:
     *output = "ErrorTermTokenNotValid";
     break;
-  case ErrorMemoryAllocationFailure:
+  case Result::ErrorMemoryAllocationFailure:
     *output = "ErrorMemoryAllocationFailure";
     break;
-  case ErrorResultCodeNotValid:
-    *output = "ErrorResultCodeNotValid";
-    break;
-  case ErrorStartSymbolNotDerivedFromInput:
+  case Result::ErrorStartSymbolNotDerivedFromInput:
     *output = "ErrorStartSymbolNotDerivedFromInput";
     break;
-  case ErrorExpectedArgListToken:
+  case Result::ErrorExpectedArgListToken:
     *output = "ErrorExpectedArgListToken";
     break;
-  case ErrorOptionRequiresValue:
+  case Result::ErrorOptionRequiresValue:
     *output = "ErrorOptionRequiresValue";
     break;
-  default:
-    return ErrorResultCodeNotValid;
+  case Result::ErrorInputTokenNotValid:
+    *output = "ErrorInputTokenNotValid";
+    break;
+  case Result::ErrorRuleIdentifierNotValid:
+    *output = "ErrorRuleIdentifierNotValid";
+    break;
   }
 
-  return Success;
+  return Result::Success;
 }
-} // namespace ap::Result
+} // namespace ap
