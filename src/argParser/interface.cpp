@@ -22,6 +22,73 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include "internals.hpp"
 
 namespace ap {
+Result toString(Result const result, std::string *const output) {
+  switch (result) {
+  case Result::Success:
+    *output = "Success";
+    break;
+  case Result::ErrorNullptrHandle:
+    *output = "ErrorNullptrHandle";
+    break;
+  case Result::ErrorNullptrInput:
+    *output = "ErrorNullptrInput";
+    break;
+  case Result::ErrorNullptrCount:
+    *output = "ErrorNullptrCount";
+    break;
+  case Result::ErrorNullptrPosition:
+    *output = "ErrorNullptrPosition";
+    break;
+  case Result::ErrorNullptrValue:
+    *output = "ErrorNullptrValue";
+    break;
+  case Result::ErrorNullptrOutput:
+    *output = "ErrorNullptrOutput";
+    break;
+  case Result::ErrorArgLongFormNotUnique:
+    *output = "ErrorArgLongFormNotUnique";
+    break;
+  case Result::ErrorArgShortFormNotUnique:
+    *output = "ErrorArgShortFormNotUnique";
+    break;
+  case Result::ErrorArgLongFormNotValid:
+    *output = "ErrorArgLongFormNotValid";
+    break;
+  case Result::ErrorArgShortFormNotValid:
+    *output = "ErrorArgShortFormNotValid";
+    break;
+  case Result::ErrorBeginEndRangeNotValid:
+    *output = "ErrorBeginEndRangeNotValid";
+    break;
+  case Result::ErrorInstanceIndexNotValid:
+    *output = "ErrorInstanceIndexNotValid";
+    break;
+  case Result::ErrorTermTokenNotValid:
+    *output = "ErrorTermTokenNotValid";
+    break;
+  case Result::ErrorMemoryAllocationFailure:
+    *output = "ErrorMemoryAllocationFailure";
+    break;
+  case Result::ErrorStartSymbolNotDerivedFromInput:
+    *output = "ErrorStartSymbolNotDerivedFromInput";
+    break;
+  case Result::ErrorExpectedArgListToken:
+    *output = "ErrorExpectedArgListToken";
+    break;
+  case Result::ErrorOptionRequiresValue:
+    *output = "ErrorOptionRequiresValue";
+    break;
+  case Result::ErrorInputTokenNotValid:
+    *output = "ErrorInputTokenNotValid";
+    break;
+  case Result::ErrorRuleIdentifierNotValid:
+    *output = "ErrorRuleIdentifierNotValid";
+    break;
+  }
+
+  return Result::Success;
+}
+
 Result createArgParser(ArgParserT **const handle) {
   if (!handle)
     return Result::ErrorNullptrHandle;
@@ -35,13 +102,13 @@ Result createArgParser(ArgParserT **const handle) {
   return Result::Success;
 }
 
+void destroyArgParser(ArgParserT const *const handle) { delete handle; }
+
 UniqueArgParser createArgParser() {
   ArgParserT *handle{};
   createArgParser(&handle);
   return {handle, destroyArgParser};
 }
-
-void destroyArgParser(ArgParserT const *const handle) { delete handle; }
 
 Result addFlag(ArgParserT *const handle,
                std::string const &argLongForm,
@@ -103,37 +170,12 @@ Result parse(ArgParserT *const handle,
     handle->database.tokenInfo = {};
     std::string const token = input[i];
     std::size_t const pos = i - begin;
+		bool skip = false;
 
-    if (token == "--") {
-      if (handle->currentState == StateT::HandleOptionValue)
-        handle->currentState = StateT::HandleOptionRogueValue;
-      else
-        handle->currentState = StateT::HandleRogueFreeValue;
-      continue;
-    }
-
-    if (handle->currentState == StateT::HandleRogueFreeValue) {
-      handle->freeValues.push_back({pos, token});
-      handle->currentState = StateT::ParseInputToken;
-      continue;
-    }
-
-    if (handle->currentState == StateT::HandleOptionValue ||
-        handle->currentState == StateT::HandleOptionRogueValue) {
-      if (token[0] == '-' &&
-          handle->currentState != StateT::HandleOptionRogueValue) {
-        handle->errorPosition = pos;
-        return Result::ErrorOptionRequiresValue;
-      }
-      handle->targetOption->back().value = token;
-      handle->currentState = StateT::ParseInputToken;
-      continue;
-    }
-
-    if (std::string{token}.size() == 1) {
-      handle->freeValues.push_back({pos, token});
-      continue;
-    }
+		if (auto r = handleState(handle, &token, pos, &skip); r != Result::Success)
+			return r;
+		if (skip)
+			continue;
 
     if (auto r = parseCYK(&handle->database, &token); r != Result::Success)
       return r;
@@ -283,75 +325,6 @@ Result getFreeValueInstance(ArgParserT const *const handle,
     return Result::ErrorInstanceIndexNotValid;
 
   *value = handle->freeValues.at(instanceIndex).value;
-  return Result::Success;
-}
-} // namespace ap
-
-namespace ap {
-Result toString(Result const result, std::string *const output) {
-  switch (result) {
-  case Result::Success:
-    *output = "Success";
-    break;
-  case Result::ErrorNullptrHandle:
-    *output = "ErrorNullptrHandle";
-    break;
-  case Result::ErrorNullptrInput:
-    *output = "ErrorNullptrInput";
-    break;
-  case Result::ErrorNullptrCount:
-    *output = "ErrorNullptrCount";
-    break;
-  case Result::ErrorNullptrPosition:
-    *output = "ErrorNullptrPosition";
-    break;
-  case Result::ErrorNullptrValue:
-    *output = "ErrorNullptrValue";
-    break;
-  case Result::ErrorNullptrOutput:
-    *output = "ErrorNullptrOutput";
-    break;
-  case Result::ErrorArgLongFormNotUnique:
-    *output = "ErrorArgLongFormNotUnique";
-    break;
-  case Result::ErrorArgShortFormNotUnique:
-    *output = "ErrorArgShortFormNotUnique";
-    break;
-  case Result::ErrorArgLongFormNotValid:
-    *output = "ErrorArgLongFormNotValid";
-    break;
-  case Result::ErrorArgShortFormNotValid:
-    *output = "ErrorArgShortFormNotValid";
-    break;
-  case Result::ErrorBeginEndRangeNotValid:
-    *output = "ErrorBeginEndRangeNotValid";
-    break;
-  case Result::ErrorInstanceIndexNotValid:
-    *output = "ErrorInstanceIndexNotValid";
-    break;
-  case Result::ErrorTermTokenNotValid:
-    *output = "ErrorTermTokenNotValid";
-    break;
-  case Result::ErrorMemoryAllocationFailure:
-    *output = "ErrorMemoryAllocationFailure";
-    break;
-  case Result::ErrorStartSymbolNotDerivedFromInput:
-    *output = "ErrorStartSymbolNotDerivedFromInput";
-    break;
-  case Result::ErrorExpectedArgListToken:
-    *output = "ErrorExpectedArgListToken";
-    break;
-  case Result::ErrorOptionRequiresValue:
-    *output = "ErrorOptionRequiresValue";
-    break;
-  case Result::ErrorInputTokenNotValid:
-    *output = "ErrorInputTokenNotValid";
-    break;
-  case Result::ErrorRuleIdentifierNotValid:
-    *output = "ErrorRuleIdentifierNotValid";
-    break;
-  }
-
   return Result::Success;
 }
 } // namespace ap

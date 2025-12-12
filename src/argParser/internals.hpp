@@ -172,21 +172,25 @@ namespace ap {
 Result updateArguments(ArgParserT *const handle,
                        std::string const *const token,
                        std::size_t const position);
+
 Result tracePostorderPath(ParsingDatabaseT *const database,
                           std::size_t const variant);
+
 Result initParseChart(ParsingDatabaseT *const database,
                       std::string const *const input);
+
 Result parseCYK(ParsingDatabaseT *const database,
                 std::string const *const input);
+
+Result handleState(ArgParserT *const handle,
+                   std::string const *const token,
+                   std::size_t const position,
+                   bool * const skip);
 
 Result fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database);
 Result fillParsingDatabaseWithDigits(ParsingDatabaseT *const database);
 Result fillParsingDatabaseWithMisc(ParsingDatabaseT *const database);
 Result fillParsingDatabase(ParsingDatabaseT *const database);
-
-Result split(std::string const *const input,
-             char const delimiter,
-             std::pair<std::string, std::string> *const output);
 
 Result checkThatAllOptionsAreAssigned(ArgParserT const *const handle);
 } // namespace ap

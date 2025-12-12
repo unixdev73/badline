@@ -26,10 +26,11 @@ namespace ap {
 Result initParseChart(ParsingDatabaseT *const database,
                       std::string const *const input) {
   database->back = std::vector<std::vector<std::vector<std::vector<BackPtrT>>>>{
-      input->size(), std::vector<std::vector<std::vector<BackPtrT>>>{
-                         input->size(), std::vector<std::vector<BackPtrT>>(
-                                            database->grammar.size(),
-                                            std::vector<BackPtrT>{})}};
+      input->size(),
+      std::vector<std::vector<std::vector<BackPtrT>>>{
+          input->size(),
+          std::vector<std::vector<BackPtrT>>(database->grammar.size(),
+                                             std::vector<BackPtrT>{})}};
 
   database->chart = std::vector<std::vector<std::vector<bool>>>{
       input->size(),
@@ -69,7 +70,7 @@ Result tracePostorderPath(ParsingDatabaseT *const database,
   std::size_t const start = GrammarRuleT::Identifier::Start;
   std::size_t const row = database->back.size() - 1;
 
-  GrammarRuleT::Identifier currentRule{GrammarRuleT::Identifier::Start};
+  GrammarRuleT::Identifier currentRule{start};
   auto entry = database->back[row][0][start][variant];
   std::list<ParsingDatabaseT::RuleDescT> visitQueue{};
 
@@ -219,7 +220,10 @@ Result updateArguments(ArgParserT *const handle,
   for (auto const &[rule, info] : handle->database.serialized) {
     auto const action = g[rule][info.variant].semanticAction;
     if (action) {
-      action(*token, info.ruleLHS.begin, info.ruleLHS.end, info.ruleRHS.begin,
+      action(*token,
+             info.ruleLHS.begin,
+             info.ruleLHS.end,
+             info.ruleRHS.begin,
              info.ruleRHS.end);
     }
   }
@@ -269,7 +273,10 @@ Result parseCYK(ParsingDatabaseT *const database,
                   {variant,
                    it,
                    {lhs, it, col, col, col + it + 1},
-                   {rhs, row - it - 1, col + it + 1, col + it + 1,
+                   {rhs,
+                    row - it - 1,
+                    col + it + 1,
+                    col + it + 1,
                     col + row + 1}});
               chart[row][col][nTerm] = true;
             }
@@ -284,45 +291,96 @@ Result parseCYK(ParsingDatabaseT *const database,
   return Result::ErrorStartSymbolNotDerivedFromInput;
 }
 
+Result handleState(ArgParserT *const handle,
+                   std::string const *const token,
+                   std::size_t const position,
+                   bool *const skip) {
+	*skip = true;
+
+  if (*token == "--" &&
+      handle->currentState != StateT::HandleOptionRogueValue) {
+    if (handle->currentState == StateT::HandleOptionValue)
+      handle->currentState = StateT::HandleOptionRogueValue;
+    else
+      handle->currentState = StateT::HandleRogueFreeValue;
+  }
+
+  else if (handle->currentState == StateT::HandleRogueFreeValue) {
+    handle->freeValues.push_back({position, *token});
+    handle->currentState = StateT::ParseInputToken;
+  }
+
+  else if (handle->currentState == StateT::HandleOptionValue ||
+           handle->currentState == StateT::HandleOptionRogueValue) {
+    if ((*token)[0] == '-' &&
+        handle->currentState != StateT::HandleOptionRogueValue) {
+      handle->errorPosition = position;
+      return Result::ErrorOptionRequiresValue;
+    }
+    handle->targetOption->back().value = *token;
+    handle->currentState = StateT::ParseInputToken;
+  }
+
+  else if (token->size() == 1)
+    handle->freeValues.push_back({position, *token});
+
+  else
+    *skip = false;
+
+  return Result::Success;
+}
+
 Result createGrammar(ParsingDatabaseT *const database) {
   using R = GrammarRuleT::Identifier;
   auto &g = database->grammar;
   g.resize(R::Size);
 
   auto &info = database->tokenInfo;
-  auto addNameR = [&info](std::string const &input, std::size_t const,
-                          std::size_t const, std::size_t const beginB,
+  auto addNameR = [&info](std::string const &input,
+                          std::size_t const,
+                          std::size_t const,
+                          std::size_t const beginB,
                           std::size_t const endB) {
     info.argName += input.substr(beginB, endB - beginB);
   };
 
-  auto argListAddNameR = [&info](std::string const &input, std::size_t const,
-                                 std::size_t const, std::size_t const beginB,
+  auto argListAddNameR = [&info](std::string const &input,
+                                 std::size_t const,
+                                 std::size_t const,
+                                 std::size_t const beginB,
                                  std::size_t const endB) {
     info.argName = input.substr(beginB, endB - beginB);
     info.isArgList = true;
   };
 
-  auto mergeExt = [&info](std::string const &, std::size_t const,
-                          std::size_t const, std::size_t const,
+  auto mergeExt = [&info](std::string const &,
+                          std::size_t const,
+                          std::size_t const,
+                          std::size_t const,
                           std::size_t const) { info.argName += info.argExt; };
 
-  auto addExt = [&info](std::string const &input, std::size_t const beginA,
-                        std::size_t const endA, std::size_t const beginB,
+  auto addExt = [&info](std::string const &input,
+                        std::size_t const beginA,
+                        std::size_t const endA,
+                        std::size_t const beginB,
                         std::size_t const endB) {
     std::string ext = input.substr(beginA, endA - beginA) +
                       input.substr(beginB, endB - beginB);
     info.argExt += ext;
   };
 
-  auto assignR = [&info](std::string const &input, std::size_t const,
-                         std::size_t const, std::size_t const beginB,
+  auto assignR = [&info](std::string const &input,
+                         std::size_t const,
+                         std::size_t const,
+                         std::size_t const beginB,
                          std::size_t const endB) {
     info.argVal = input.substr(beginB, endB - beginB);
   };
 
-  auto freeVal = [&info](std::string const &, std::size_t const,
-                         std::size_t const, std::size_t const,
+  auto freeVal = [&info](std::string const &,
+                         std::size_t const,
+                         std::size_t const,
+                         std::size_t const,
                          std::size_t const) { info.isFreeVal = true; };
 
   g[R::ArgTerm] = {{R::ShortArgPrefix, R::ShortArgPrefix}};
@@ -393,7 +451,7 @@ Result fillParsingDatabaseWithMisc(ParsingDatabaseT *const database) {
   mapping.push_back({R::AssignmentOp, '='});
   mapping.push_back({R::Underscore, '_'});
 
-  for (std::size_t i = 33; i < 127; ++i) {
+  for (std::size_t i = 32; i < 127; ++i) {
     mapping.push_back({R::Printable, char(i)});
     if (char(i) != '-')
       mapping.push_back({R::NonShortArgPrefix, char(i)});
@@ -434,22 +492,6 @@ Result fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database) {
     mapping.push_back({GrammarRuleT::Identifier::Letter, c});
     mapping.push_back({GrammarRuleT::Identifier::Alnum, c});
   }
-  return Result::Success;
-}
-
-Result split(std::string const *const input,
-             char const delimiter,
-             std::pair<std::string, std::string> *const output) {
-  if (!input->size())
-    return Result::Success;
-
-  std::size_t mark = input->find(delimiter);
-  if (mark != std::string::npos) {
-    output->first = std::string(*input, 0, mark);
-    output->second = std::string(*input, mark + 1, input->size() - mark - 1);
-  } else
-    output->first = *input;
-
   return Result::Success;
 }
 

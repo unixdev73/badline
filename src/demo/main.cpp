@@ -62,7 +62,7 @@ int main(int const argc, char const *const *const argv) {
       std::cout << "at position: " << position << std::endl;
       return 1;
     }
-    std::cout << std::endl << std::endl;
+    std::cout << std::endl;
 
     std::size_t count{};
     std::string value;
