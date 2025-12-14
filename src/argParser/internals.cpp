@@ -25,33 +25,34 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 namespace ap {
 Result initParseChart(ParsingDatabaseT *const database,
                       std::string const *const input) {
-  database->back = std::vector<std::vector<std::vector<std::vector<BackPtrT>>>>{
+  database->back = {
       input->size(),
-      std::vector<std::vector<std::vector<BackPtrT>>>{
-          input->size(),
-          std::vector<std::vector<BackPtrT>>(database->grammar.size(),
-                                             std::vector<BackPtrT>{})}};
+      {input->size(), {database->grammar.size(), std::vector<BackPtrT>{}}}};
 
-  database->chart = std::vector<std::vector<std::vector<bool>>>{
+  database->chart = {
       input->size(),
-      std::vector<std::vector<bool>>{
-          input->size(), std::vector<bool>(database->grammar.size(), false)}};
+      {input->size(), std::vector<bool>(database->grammar.size(), false)}};
 
   for (std::size_t i = 0; i < input->size(); ++i) {
     bool validToken = false;
-    for (auto const &[nterm, term] : database->termMapping) {
-      if (term == (*input)[i]) {
-        database->back[0][i][nterm].push_back(
-            BackPtrT{.variant = 0,
-                     .ruleLHS = RuleInfoT{.identifier = nterm,
-                                          .locationY = 0,
-                                          .begin = i,
-                                          .end = i + 1},
-                     .ruleRHS = RuleInfoT{}});
-        database->chart[0][i][nterm] = true;
-        validToken = true;
+    for (auto const &[nterms, terms] : database->termMapping) {
+      for (auto const &term : terms) {
+        if (term == (*input)[i]) {
+          for (auto const &nterm : nterms) {
+            database->back[0][i][nterm].push_back(
+                BackPtrT{.variant = 0,
+                         .ruleLHS = RuleInfoT{.identifier = nterm,
+                                              .locationY = 0,
+                                              .begin = i,
+                                              .end = i + 1},
+                         .ruleRHS = RuleInfoT{}});
+            database->chart[0][i][nterm] = true;
+            validToken = true;
+          }
+        }
       }
     }
+
     if (!validToken)
       return Result::ErrorTermTokenNotValid;
   }
@@ -285,7 +286,7 @@ Result handleState(ArgParserT *const handle,
                    std::string const *const token,
                    std::size_t const position,
                    bool *const skip) {
-	*skip = true;
+  *skip = true;
 
   if (*token == "--" &&
       handle->currentState != StateT::HandleOptionRogueValue) {
@@ -437,52 +438,69 @@ Result fillParsingDatabase(ParsingDatabaseT *const database) {
 Result fillParsingDatabaseWithMisc(ParsingDatabaseT *const database) {
   auto &mapping = database->termMapping;
   using R = GrammarRuleT::Identifier;
-  mapping.push_back({R::ShortArgPrefix, '-'});
-  mapping.push_back({R::Comma, ','});
-  mapping.push_back({R::AssignmentOp, '='});
-  mapping.push_back({R::Underscore, '_'});
+  mapping.push_back({{R::ShortArgPrefix}, {'-'}});
+  mapping.push_back({{R::Comma}, {','}});
+  mapping.push_back({{R::AssignmentOp}, {'='}});
+  mapping.push_back({{R::Underscore}, {'_'}});
 
-  for (std::size_t i = 32; i < 127; ++i) {
-    mapping.push_back({R::Printable, char(i)});
+  std::vector<ParsingDatabaseT::TermId> terms{};
+  terms.reserve(128);
+
+  for (std::size_t i = 32; i < 127; ++i)
     if (char(i) != '-')
-      mapping.push_back({R::NonShortArgPrefix, char(i)});
-  }
+      terms.push_back(char(i));
+
+  mapping.push_back({{R::NonShortArgPrefix, R::Printable}, std::move(terms)});
+  mapping.push_back({{R::Printable}, {'-'}});
+
+  terms.clear();
+  terms.reserve(128);
 
   for (std::size_t i = 33; i < 48; ++i)
-    mapping.push_back({R::NonAlnum, char(i)});
+    terms.push_back(char(i));
   for (std::size_t i = 58; i < 65; ++i)
-    mapping.push_back({R::NonAlnum, char(i)});
+    terms.push_back(char(i));
   for (std::size_t i = 123; i < 127; ++i)
-    mapping.push_back({R::NonAlnum, char(i)});
+    terms.push_back(char(i));
+
+  mapping.push_back({{R::NonAlnum}, std::move(terms)});
   return Result::Success;
 }
 
 Result fillParsingDatabaseWithDigits(ParsingDatabaseT *const database) {
-  std::string const digits{"0123456789"};
+  std::vector<ParsingDatabaseT::TermId> digits{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   auto &mapping = database->termMapping;
 
-  for (char c : digits) {
-    mapping.push_back({GrammarRuleT::Identifier::Digit, c});
-    mapping.push_back({GrammarRuleT::Identifier::Alnum, c});
-  }
+  mapping.push_back(
+      {{GrammarRuleT::Identifier::Digit, GrammarRuleT::Identifier::Alnum},
+       std::move(digits)});
   return Result::Success;
 }
 
 Result fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database) {
-  std::string const alphabet{"abcdefghijklmnopqrstuvwxyz"};
+  std::vector<ParsingDatabaseT::TermId> alphabet{
+      char('a'), char('b'), char('c'), char('d'), char('e'), char('f'),
+      char('g'), char('h'), char('i'), char('j'), char('k'), char('l'),
+      char('m'), char('n'), char('o'), char('p'), char('q'), char('r'),
+      char('s'), char('t'), char('u'), char('v'), char('w'), char('x'),
+      char('y'), char('z')};
+
   auto &mapping = database->termMapping;
 
-  for (char c : alphabet) {
-    mapping.push_back({GrammarRuleT::Identifier::SmallLetter, c});
-    mapping.push_back({GrammarRuleT::Identifier::Letter, c});
-    mapping.push_back({GrammarRuleT::Identifier::Alnum, c});
-  }
+  mapping.push_back({{GrammarRuleT::Identifier::SmallLetter,
+                      GrammarRuleT::Identifier::Letter,
+                      GrammarRuleT::Identifier::Alnum},
+                     std::move(alphabet)});
 
-  for (char c : alphabet) {
-    mapping.push_back({GrammarRuleT::Identifier::BigLetter, std::toupper(c)});
-    mapping.push_back({GrammarRuleT::Identifier::Letter, c});
-    mapping.push_back({GrammarRuleT::Identifier::Alnum, c});
-  }
+  std::vector<ParsingDatabaseT::TermId> Alphabet{
+      char('A'), char('B'), char('C'), char('D'), char('E'), char('F'),
+      char('G'), char('H'), char('I'), char('J'), char('K'), char('L'),
+      char('M'), char('N'), char('O'), char('P'), char('Q'), char('R'),
+      char('S'), char('T'), char('U'), char('V'), char('W'), char('X'),
+      char('Y'), char('Z')};
+
+  mapping.push_back(
+      {{GrammarRuleT::Identifier::BigLetter}, std::move(Alphabet)});
   return Result::Success;
 }
 

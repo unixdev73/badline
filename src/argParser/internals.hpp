@@ -132,7 +132,7 @@ struct TokenInfoT {
 struct ParsingDatabaseT {
   using NonTermId = std::size_t;
   using TermId = char;
-  using TermPairT = std::pair<NonTermId, TermId>;
+  using TermPairT = std::pair<std::vector<NonTermId>, std::vector<TermId>>;
   std::vector<TermPairT> termMapping{};
 
   using GrammarRuleT = std::vector<GrammarRuleVariantT>;
