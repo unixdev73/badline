@@ -1,8 +1,42 @@
 This project follows a few rules:
 
-	-> This project is comprised of modules
 	-> Every module has to be capable of being built independently!!!
-	-> Every module has its own set or result codes
+	-> Every module has its own set of result codes
 	-> Every module provides a public API
 	-> Heavy logic for each module is implemented in the private API
 	-> Only opaque handles are exposed to the client
+	-> No exceptions allowed!!! You can handle external ones, but never throw!
+
+The reason for this is simple.
+Dynamic polymorphism and the majority of object oriented programming
+is total trash. And even the parts that are good are usually abused!
+
+Let's be clear. The (IMHO only) two good things about
+object oriented programming is the ability to deallocate resources
+automatically through the use of destructors, and the simplification
+of interfaces through the use of data members.
+
+Apart from RAII and the facade / adapter patterns,
+the rest of OOP is total garbage.
+It makes the code overcomplicated, introduces useless and unnecessary
+dependencies on user defined types, which increases coupling,
+and slows down execution through vtable lookups in most cases.
+
+Perhaps the worst part about OOP, when used by people who don't know
+what they are doing, which is the overwhelming majority,
+is that it makes testing living hell, and usually introduces the
+requirement of an external testing library.
+
+Well, let me tell you something,
+If you need an external library to test your code, then your design
+is absolute trash!!!!!!!!
+
+We don't do that here. Production code is testable code.
+It becomes very easy to test software written using
+the structural programming paradigm.
+
+Why?
+
+BECAUSE THERE IS NO LANGUAGE CONSTRUCT MORE TESTABLE THAN A FUNCTION!!!
+
+Get that inside your head, and never forget it.

@@ -67,7 +67,7 @@ Result initParseChart(ParsingDatabaseT *const database,
 
 Result tracePostorderPath(ParsingDatabaseT *const database,
                           std::size_t const variant) {
-  std::size_t const start = GrammarRuleT::Identifier::Start;
+  std::size_t const start = database->startSymbol;
   std::size_t const row = database->back.size() - 1;
 
   GrammarRuleT::Identifier currentRule{start};
@@ -257,6 +257,7 @@ Result parseCYK(ParsingDatabaseT *const database,
   if (auto code = initParseChart(database, input); code != Result::Success)
     return code;
 
+  auto const start = database->startSymbol;
   auto const &g = database->grammar;
   auto &chart = database->chart;
   auto &back = database->back;
@@ -265,6 +266,7 @@ Result parseCYK(ParsingDatabaseT *const database,
     for (std::size_t col = 0; col < input->size() - row; ++col) {
       for (std::size_t it = 0; it < row; ++it) {
         for (std::size_t nTerm = 0; nTerm < g.size(); ++nTerm) {
+
           back[row][col][nTerm].reserve(g[nTerm].size());
           for (std::size_t variant = 0; variant < g[nTerm].size(); ++variant) {
             auto const &[lhs, rhs, cb] = g[nTerm][variant];
@@ -286,7 +288,7 @@ Result parseCYK(ParsingDatabaseT *const database,
     }
   }
 
-  if (chart[input->size() - 1][0][GrammarRuleT::Identifier::Start])
+  if (chart[input->size() - 1][0][start])
     return Result::Success;
   return Result::ErrorStartSymbolNotDerivedFromInput;
 }
@@ -433,6 +435,7 @@ Result createGrammar(ParsingDatabaseT *const database) {
 }
 
 Result fillParsingDatabase(ParsingDatabaseT *const database) {
+  database->startSymbol = GrammarRuleT::Identifier::Start;
   database->termMapping.reserve(500);
 
   fillParsingDatabaseWithAlphabet(database);

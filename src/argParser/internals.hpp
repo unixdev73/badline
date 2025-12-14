@@ -140,6 +140,7 @@ struct ParsingDatabaseT {
 
   using GrammarRuleT = std::vector<GrammarRuleVariantT>;
   std::vector<GrammarRuleT> grammar{};
+  NonTermId startSymbol{};
 
   using ParseChartT = std::vector<std::vector<std::vector<bool>>>;
   ParseChartT chart{};

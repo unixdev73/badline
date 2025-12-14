@@ -93,12 +93,13 @@ Result createArgParser(ArgParserT **const handle) {
   if (!handle)
     return Result::ErrorNullptrHandle;
 
-  if (auto parser = new ArgParserT{}; parser)
+  if (auto parser = new ArgParserT{}; parser) {
+    if (auto r = fillParsingDatabase(&parser->database); r != Result::Success)
+      return r;
     *handle = parser;
-  else
+  } else
     return Result::ErrorMemoryAllocationFailure;
 
-  fillParsingDatabase(&(*handle)->database);
   return Result::Success;
 }
 
@@ -170,12 +171,12 @@ Result parse(ArgParserT *const handle,
     handle->database.tokenInfo = {};
     std::string const token = input[i];
     std::size_t const pos = i - begin;
-		bool skip = false;
+    bool skip = false;
 
-		if (auto r = handleState(handle, &token, pos, &skip); r != Result::Success)
-			return r;
-		if (skip)
-			continue;
+    if (auto r = handleState(handle, &token, pos, &skip); r != Result::Success)
+      return r;
+    if (skip)
+      continue;
 
     if (auto r = parseCYK(&handle->database, &token); r != Result::Success)
       return r;
