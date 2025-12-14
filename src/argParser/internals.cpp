@@ -43,17 +43,11 @@ Result initParseChart(ParsingDatabaseT *const database,
       if (term == (*input)[i]) {
         database->back[0][i][nterm].push_back(
             BackPtrT{.variant = 0,
-                     .splitPoint = i,
                      .ruleLHS = RuleInfoT{.identifier = nterm,
                                           .locationY = 0,
-                                          .locationX = i,
                                           .begin = i,
                                           .end = i + 1},
-                     .ruleRHS = RuleInfoT{.identifier = 0,
-                                          .locationY = 0,
-                                          .locationX = 0,
-                                          .begin = 0,
-                                          .end = 0}});
+                     .ruleRHS = RuleInfoT{}});
         database->chart[0][i][nterm] = true;
         validToken = true;
       }
@@ -70,7 +64,7 @@ Result tracePostorderPath(ParsingDatabaseT *const database,
   std::size_t const start = database->startSymbol;
   std::size_t const row = database->back.size() - 1;
 
-  GrammarRuleT::Identifier currentRule{start};
+  std::size_t currentRule{start};
   auto entry = database->back[row][0][start][variant];
   std::list<ParsingDatabaseT::RuleDescT> visitQueue{};
 
@@ -80,27 +74,26 @@ Result tracePostorderPath(ParsingDatabaseT *const database,
       visitQueue.push_back({currentRule, entry});
 
       auto const l = entry.ruleLHS;
-      auto const &el = database->back[l.locationY][l.locationX][l.identifier];
+      auto const &el = database->back[l.locationY][l.begin][l.identifier];
       if (!el.size())
         break;
 
-      currentRule = static_cast<GrammarRuleT::Identifier>(l.identifier);
+      currentRule = l.identifier;
       entry = el[0];
     }
 
     if (visitQueue.empty())
       return Result::Success;
 
-    currentRule =
-        static_cast<GrammarRuleT::Identifier>(visitQueue.back().first);
+    currentRule = visitQueue.back().first;
     entry = visitQueue.back().second;
     visitQueue.pop_back();
 
     if (visitQueue.size() && visitQueue.back().second == entry) {
       auto const r = entry.ruleRHS;
-      auto const &el = database->back[r.locationY][r.locationX][r.identifier];
+      auto const &el = database->back[r.locationY][r.begin][r.identifier];
       if (el.size()) {
-        currentRule = static_cast<GrammarRuleT::Identifier>(r.identifier);
+        currentRule = r.identifier;
         entry = el[0];
       }
     } else {
@@ -273,13 +266,8 @@ Result parseCYK(ParsingDatabaseT *const database,
             if (chart[it][col][lhs] && chart[row - it - 1][col + it + 1][rhs]) {
               back[row][col][nTerm].push_back(
                   {variant,
-                   it,
-                   {lhs, it, col, col, col + it + 1},
-                   {rhs,
-                    row - it - 1,
-                    col + it + 1,
-                    col + it + 1,
-                    col + row + 1}});
+                   {lhs, it, col, col + it + 1},
+                   {rhs, row - it - 1, col + it + 1, col + row + 1}});
               chart[row][col][nTerm] = true;
             }
           }

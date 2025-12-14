@@ -103,24 +103,21 @@ struct GrammarRuleVariantT {
 struct RuleInfoT {
   std::size_t identifier;
   std::size_t locationY;
-  std::size_t locationX;
   std::size_t begin, end;
 
   bool operator==(RuleInfoT const &o) const {
-    return identifier == o.identifier && locationX == o.locationX &&
-           locationY == o.locationY && begin == o.begin && end == o.end;
+    return identifier == o.identifier && locationY == o.locationY &&
+           begin == o.begin && end == o.end;
   }
 };
 
 struct BackPtrT {
   std::size_t variant;
-  std::size_t splitPoint;
   RuleInfoT ruleLHS;
   RuleInfoT ruleRHS;
 
   bool operator==(BackPtrT const &o) const {
-    return variant == o.variant && splitPoint == o.splitPoint &&
-           ruleLHS == o.ruleLHS && ruleRHS == o.ruleRHS;
+    return variant == o.variant && ruleLHS == o.ruleLHS && ruleRHS == o.ruleRHS;
   }
 };
 
