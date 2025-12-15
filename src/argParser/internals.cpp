@@ -499,8 +499,10 @@ Result fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database) {
       char('S'), char('T'), char('U'), char('V'), char('W'), char('X'),
       char('Y'), char('Z')};
 
-  mapping.push_back(
-      {{GrammarRuleT::Identifier::BigLetter}, std::move(Alphabet)});
+  mapping.push_back({{GrammarRuleT::Identifier::BigLetter,
+                      GrammarRuleT::Identifier::Letter,
+                      GrammarRuleT::Identifier::Alnum},
+                     std::move(Alphabet)});
   return Result::Success;
 }
 
