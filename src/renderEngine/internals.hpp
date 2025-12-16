@@ -18,6 +18,7 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include <functional>
@@ -74,12 +75,18 @@ struct RenderEngineT {
   std::string errorMessage{};
 };
 
-int createVulkanInstance(std::string const &appName, bool validate,
-                         VkInstance *handle, VkResult *error);
+Result createVulkanInstance(std::string const &appName,
+                            bool validate,
+                            VkInstance *handle,
+                            VkResult *error);
 
-int selectOptimalGPU(VkInstance const instance, bool const dbg,
-                     VkPhysicalDevice *phy, VkDevice *dev, VkQueue *present,
-                     VkQueue *graphics);
+Result selectOptimalGPU(VkInstance const instance,
+                        bool const dbg,
+                        VkPhysicalDevice *phy,
+                        VkDevice *dev,
+                        VkQueue *present,
+                        VkQueue *graphics);
 
-int createWindow(RenderEngineT *const engine, uint32_t width, uint32_t height);
+Result
+createWindow(RenderEngineT *const engine, uint32_t width, uint32_t height);
 } // namespace re

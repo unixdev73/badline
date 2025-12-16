@@ -18,79 +18,21 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <badline/renderEngine.hpp>
-#include <badline/argParser.hpp>
+#include "app.hpp"
 #include <iostream>
 #include <vector>
+#include <string>
 
 int main(int const argc, char const *const *const argv) {
   try {
-    if (argc == 1)
-      return 1;
+    demo::App a{.argc = std::size_t(argc), .argv = argv};
 
-    auto parser = ap::createArgParser();
-    ap::ArgParserT *handle = parser.get();
-
-    std::vector<std::string> fid{};
-    std::vector<std::string> oid{};
-
-    auto addF = [&fid, handle](std::string const &s, char const c) {
-      ap::addFlag(handle, s, c);
-      fid.push_back(s);
-    };
-
-    auto addO = [&oid, handle](std::string const &s, char const c) {
-      ap::addOption(handle, s, c);
-      oid.push_back(s);
-    };
-
-    addF("help", 'h');
-    addF("quiet", 'q');
-    addF("clean", 'c');
-    addO("value", 'v');
-    addO("output", 'o');
-
-    std::size_t const begin = 1;
-    auto resultCode = ap::parse(handle, argv, begin, argc);
-    std::string result{};
-    ap::toString(resultCode, &result);
-    std::cout << "Parsing status: " << result;
-    if (resultCode != ap::Result::Success) {
-      std::size_t position{};
-      ap::getErrorPosition(handle, &position);
-      std::cout << ", problematic token: '" << argv[begin + position] << "' ";
-      std::cout << "at position: " << position << std::endl;
+    if (demo::initialize(&a)) {
+      std::cerr << "Failed to initialize demo" << std::endl;
       return 1;
     }
-    std::cout << std::endl;
 
-    std::size_t count{};
-    std::string value;
-    std::size_t pos;
-
-    for (auto const &f : fid) {
-      ap::getFlagCount(handle, f, &count);
-      std::cout << f << " occurred: " << count << " times\n";
-    }
-
-    for (auto const &o : oid) {
-      ap::getOptionCount(handle, o, &count);
-      std::cout << o << " occurred: " << count << " times\n";
-      for (std::size_t i = 0; i < count; ++i) {
-        ap::getOptionInstanceValue(handle, o, i, &value);
-        ap::getOptionInstancePosition(handle, o, i, &pos);
-        std::cout << "instance: " << i << ": value: " << value
-                  << " pos: " << pos << std::endl;
-      }
-    }
-
-    ap::getFreeValueCount(handle, &count);
-    for (std::size_t i = 0; i < count; ++i) {
-      ap::getFreeValueInstance(handle, i, &value);
-      ap::getFreeValueInstancePosition(handle, i, &pos);
-      std::cout << "free val instance: " << i << ": value: " << value
-                << " pos: " << pos << std::endl;
-    }
+    return demo::run(&a);
 
   } catch (std::exception const &e) {
     std::cerr << "Error: Caught exception: " << e.what() << std::endl;
@@ -98,3 +40,95 @@ int main(int const argc, char const *const *const argv) {
     std::cerr << "Error: Caught unknown exception." << std::endl;
   }
 }
+
+namespace demo {
+bool run(App *const) { return 0; }
+
+bool initialize(App *const a) {
+  if (a->argc > 1 && initializeArgParser(a))
+    return 1;
+
+  a->engine = re::createRenderEngine("Demo", true);
+  if (!a->engine) {
+    std::cerr << "Failed to create render engine" << std::endl;
+    return 1;
+  }
+
+  if (openWindow(a)) {
+    std::cerr << "Failed to open window" << std::endl;
+    return 1;
+  }
+
+  return 0;
+}
+
+bool initializeArgParser(App *const a) {
+  a->parser = ap::createArgParser();
+  if (!a->parser) {
+    std::cerr << "Failed to create arg parser" << std::endl;
+    return 1;
+  }
+
+  ap::addOption(a->parser.get(), "width", 'w');
+  ap::addOption(a->parser.get(), "height", 'h');
+
+  auto result = ap::parse(a->parser.get(), a->argv, 1, a->argc);
+  if (result != ap::Result::Success) {
+    std::size_t pos{};
+    ap::getErrorPosition(a->parser.get(), &pos);
+    std::string err = a->argv[pos + 1];
+    std::cerr << "Argument parsing failed; Problematic token";
+    std::cerr << " at position " << pos << ": '" << err << "'" << std::endl;
+    return 1;
+  }
+
+  return 0;
+}
+
+bool openWindow(App *const a) {
+  std::vector<std::string> const opts = {"width", "height"};
+  std::vector<std::string> vals(opts.size(), "");
+  std::size_t width{640}, height{480};
+
+  if (a->argc > 1) {
+    for (std::size_t i = 0; i < opts.size(); ++i) {
+      std::size_t count{};
+
+      auto result = ap::getOptionCount(a->parser.get(), opts[i], &count);
+      if (result != ap::Result::Success) {
+        std::cerr << "Failed to query option count: '" << opts[i];
+        std::cerr << "'" << std::endl;
+        return 1;
+      }
+
+      if (count)
+        ap::getOptionInstanceValue(a->parser.get(), opts[i], 0, &vals[i]);
+    }
+
+    auto getSize = [&vals](std::size_t const in, std::size_t &out) {
+      if (vals[in].size())
+        try {
+          out = std::stoull(vals[in]);
+        } catch (...) {
+          std::cerr << "Converting: '" << vals[in] << "' to a number failed\n";
+          return 1;
+        }
+      return 0;
+    };
+
+    if (getSize(0, width))
+      return 1;
+    if (getSize(1, height))
+      return 1;
+  }
+
+  auto result = re::createWindow(a->engine.get(), width, height);
+  if (result != re::Result::Success) {
+    std::string err{};
+    std::cerr << "Window creation failure: " << err << std::endl;
+    return 1;
+  }
+
+  return 0;
+}
+} // namespace demo

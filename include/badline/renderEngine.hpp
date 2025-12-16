@@ -22,12 +22,13 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <memory>
 
-namespace re::Result {
-enum Type {
+namespace re {
+enum class Result : int {
   Success,
   ErrorNullptrHandle,
   ErrorNullptrWindow,
   ErrorNullptrMessage,
+  ErrorNullptrOutput,
   ErrorFailedToInitGLFW,
   ErrorMemoryAllocationFailure,
   ErrorVulkanInstanceCreationFailure,
@@ -50,7 +51,9 @@ enum Type {
   ErrorSwapchainImageFillFailure,
   ErrorNoErrorMessage
 };
-} // namespace re::Result
+
+Result toString(Result const result, std::string *const output);
+} // namespace re
 
 namespace re {
 struct RenderEngineT;
@@ -58,18 +61,20 @@ struct RenderEngineT;
 using UniqueRenderEngine =
     std::unique_ptr<RenderEngineT, void (*)(RenderEngineT *const)>;
 
-int createRenderEngine(RenderEngineT **const handle, std::string const &appName,
-                       bool debug);
+Result createRenderEngine(RenderEngineT **const handle,
+                          std::string const &appName,
+                          bool debug);
 
 void destroyRenderEngine(RenderEngineT const *const handle);
 
 UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug);
 
-int createWindow(RenderEngineT *const handle, uint32_t const width,
-                 uint32_t const height);
+Result createWindow(RenderEngineT *const handle,
+                    uint32_t const width,
+                    uint32_t const height);
 
-int run(RenderEngineT *const handle);
+Result run(RenderEngineT *const handle);
 
-int getErrorMessage(RenderEngineT const *const handle,
-                    std::string *const message);
+Result getErrorMessage(RenderEngineT const *const handle,
+                       std::string *const message);
 } // namespace re

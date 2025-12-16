@@ -24,8 +24,97 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <string>
 
 namespace re {
-int createRenderEngine(RenderEngineT **const handle, std::string const &appName,
-                       bool debug) {
+Result toString(Result const result, std::string *const output) {
+  if (!output)
+    return Result::ErrorNullptrOutput;
+
+  switch (result) {
+  case Result::Success:
+    *output = "Success";
+    break;
+  case Result::ErrorNullptrHandle:
+    *output = "ErrorNullptrHandle";
+    break;
+  case Result::ErrorNullptrWindow:
+    *output = "ErrorNullptrWindow";
+    break;
+  case Result::ErrorNullptrMessage:
+    *output = "ErrorNullptrMessage";
+    break;
+  case Result::ErrorNullptrOutput:
+    *output = "ErrorNullptrOutput";
+    break;
+  case Result::ErrorFailedToInitGLFW:
+    *output = "ErrorFailedToInitGLFW";
+    break;
+  case Result::ErrorMemoryAllocationFailure:
+    *output = "ErrorMemoryAllocationFailure";
+    break;
+  case Result::ErrorVulkanInstanceCreationFailure:
+    *output = "ErrorVulkanInstanceCreationFailure";
+    break;
+  case Result::ErrorNoVulkanDevicesAvailable:
+    *output = "ErrorNoVulkanDevicesAvailable";
+    break;
+  case Result::ErrorVulkanDeviceCreationFailure:
+    *output = "ErrorVulkanDeviceCreationFailure";
+    break;
+  case Result::ErrorGLFWindowCreationFailure:
+    *output = "ErrorGLFWindowCreationFailure";
+    break;
+  case Result::ErrorVulkanSurfaceCreationFailure:
+    *output = "ErrorVulkanSurfaceCreationFailure";
+    break;
+  case Result::ErrorPresentModesQueryFailure:
+    *output = "ErrorPresentModesQueryFailure";
+    break;
+  case Result::ErrorPresentModesFillFailure:
+    *output = "ErrorPresentModesFillFailure";
+    break;
+  case Result::ErrorRequestedPresentModeNotAvailable:
+    *output = "ErrorRequestedPresentModeNotAvailable";
+    break;
+  case Result::ErrorSurfaceCapabilitiesQueryFailure:
+    *output = "ErrorSurfaceCapabilitiesQueryFailure";
+    break;
+  case Result::ErrorRequestedSurfaceWidthTooLarge:
+    *output = "ErrorRequestedSurfaceWidthTooLarge";
+    break;
+  case Result::ErrorRequestedSurfaceHeightTooLarge:
+    *output = "ErrorRequestedSurfaceHeightTooLarge";
+    break;
+  case Result::ErrorColorAttachmentBitNotSupported:
+    *output = "ErrorColorAttachmentBitNotSupported";
+    break;
+  case Result::ErrorSurfaceFormatQueryFailure:
+    *output = "ErrorSurfaceFormatQueryFailure";
+    break;
+  case Result::ErrorSurfaceFormatFillFailure:
+    *output = "ErrorSurfaceFormatFillFailure";
+    break;
+  case Result::ErrorNoSurfaceFormatsAvailable:
+    *output = "ErrorNoSurfaceFormatsAvailable";
+    break;
+  case Result::ErrorVulkanSwapchainCreationFailure:
+    *output = "ErrorVulkanSwapchainCreationFailure";
+    break;
+  case Result::ErrorSwapchainImageQueryFailure:
+    *output = "ErrorSwapchainImageQueryFailure";
+    break;
+  case Result::ErrorSwapchainImageFillFailure:
+    *output = "ErrorSwapchainImageFillFailure";
+    break;
+  case Result::ErrorNoErrorMessage:
+    *output = "ErrorNoErrorMessage";
+    break;
+  }
+
+  return Result::Success;
+}
+
+Result createRenderEngine(RenderEngineT **const handle,
+                          std::string const &appName,
+                          bool debug) {
   if (!handle)
     return Result::ErrorNullptrHandle;
 
@@ -38,7 +127,8 @@ int createRenderEngine(RenderEngineT **const handle, std::string const &appName,
 
   VkInstance instance{};
   VkResult code{};
-  if (auto err = createVulkanInstance(appName, debug, &instance, &code); err)
+  auto result = createVulkanInstance(appName, debug, &instance, &code);
+  if (result != re::Result::Success)
     return Result::ErrorVulkanInstanceCreationFailure;
 
   (*handle)->instance.handle = {
@@ -49,9 +139,9 @@ int createRenderEngine(RenderEngineT **const handle, std::string const &appName,
   VkPhysicalDevice phy{};
   VkDevice dev{};
   VkQueue graph{}, pres{};
-  if (auto err = selectOptimalGPU(instance, debug, &phy, &dev, &pres, &graph);
-      err)
-    return err;
+  result = selectOptimalGPU(instance, debug, &phy, &dev, &pres, &graph);
+  if (result != re::Result::Success)
+    return result;
 
   (*handle)->device.identifier = phy;
   (*handle)->device.handle = {dev, [](VkDevice ptr) {
@@ -64,7 +154,7 @@ int createRenderEngine(RenderEngineT **const handle, std::string const &appName,
   return Result::Success;
 }
 
-int run(RenderEngineT *const engine) {
+Result run(RenderEngineT *const engine) {
   if (!engine->window.handle)
     return Result::ErrorNullptrWindow;
 
@@ -78,8 +168,9 @@ int run(RenderEngineT *const engine) {
   return Result::Success;
 }
 
-int createWindow(RenderEngineT *const engine, uint32_t const width,
-                 uint32_t const height) {
+Result createWindow(RenderEngineT *const engine,
+                    uint32_t const width,
+                    uint32_t const height) {
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
 
@@ -231,8 +322,10 @@ UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug) {
   return UniqueRenderEngine{engine, destroyRenderEngine};
 }
 
-int createVulkanInstance(std::string const &appName, bool debug,
-                         VkInstance *handle, VkResult *code) {
+Result createVulkanInstance(std::string const &appName,
+                            bool debug,
+                            VkInstance *handle,
+                            VkResult *code) {
   VkInstanceCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 
@@ -290,9 +383,12 @@ int createVulkanInstance(std::string const &appName, bool debug,
   return Result::Success;
 }
 
-int selectOptimalGPU(VkInstance const instance, bool const dbg,
-                     VkPhysicalDevice *phy, VkDevice *dev, VkQueue *presentQ,
-                     VkQueue *graphicsQ) {
+Result selectOptimalGPU(VkInstance const instance,
+                        bool const dbg,
+                        VkPhysicalDevice *phy,
+                        VkDevice *dev,
+                        VkQueue *presentQ,
+                        VkQueue *graphicsQ) {
 
   uint32_t count{};
   std::vector<VkPhysicalDevice> devs{};
@@ -431,8 +527,8 @@ int selectOptimalGPU(VkInstance const instance, bool const dbg,
   return Result::Success;
 }
 
-int getErrorMessage(RenderEngineT const *const handle,
-                    std::string *const message) {
+Result getErrorMessage(RenderEngineT const *const handle,
+                       std::string *const message) {
   if (!handle)
     return Result::ErrorNullptrHandle;
   if (!message)
