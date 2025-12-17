@@ -20,31 +20,16 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/argParser.hpp>
 #include <iostream>
-#include <fstream>
 #include <ranges>
 #include <vector>
 
+using ap::addOption;
+
 int main(int const argc, char const *const *const argv) {
-  if (argc < 4) {
+  if (argc < 2) {
     std::cerr << "The number of arguments is too small." << std::endl;
-    std::cerr << "Usage: <flag defs file> <opt defs file> <input>" << std::endl;
     return 1;
   }
-
-  std::ifstream flags{argv[1]}, opts{argv[2]};
-  if (!flags.is_open() || !opts.is_open()) {
-    std::cerr << "Failed to open resource files." << std::endl;
-    return 1;
-  }
-
-  std::vector<std::string> fdef{};
-  std::vector<std::string> odef{};
-  std::string line{};
-
-  while (std::getline(flags, line))
-    fdef.push_back(line);
-  while (std::getline(opts, line))
-    odef.push_back(line);
 
   auto parser = ap::createArgParser();
   auto handle = parser.get();
@@ -54,34 +39,23 @@ int main(int const argc, char const *const *const argv) {
     return 2;
   }
 
-  auto splitAndRegister = [&parser](std::string const &arg, auto &&f) {
+  std::size_t const offset = 1;
+  for (std::size_t i = offset; i < std::size_t(argc); ++i) {
+    std::string const arg = argv[i];
     auto pairView = std::ranges::views::split(arg, ':');
     auto keyVal = std::ranges::to<std::vector<std::string>>(pairView);
     if (keyVal.empty() || keyVal[0].empty()) {
       std::cerr << "At least a long form must be provided." << std::endl;
-      return ap::Result::ErrorArgLongFormNotValid;
+      return 3;
     }
 
     bool const shV = keyVal.size() == 2 && keyVal[1][0] != 0;
-    return f(parser.get(), keyVal[0], shV ? keyVal[1][0] : 0);
-  };
-
-  std::size_t const offset = 3;
-
-  for (auto const &a : fdef) {
-    if (auto r = splitAndRegister(a, ap::addFlag); r != ap::Result::Success) {
+    auto result = addOption(parser.get(), keyVal[0], shV ? keyVal[1][0] : 0);
+    if (result != ap::Result::Success) {
       std::string code{};
-      ap::toString(r, &code);
-      std::cerr << "Failed to add flag with error: " << code << std::endl;
-      return 4;
-    }
-  }
-
-  for (auto const &a : odef) {
-    if (auto r = splitAndRegister(a, ap::addOption); r != ap::Result::Success) {
-      std::string code{};
-      ap::toString(r, &code);
-      std::cerr << "Failed to add option with error: " << code << std::endl;
+      ap::toString(result, &code);
+      std::cerr << "Failed to add argument: " << keyVal[0] << " with error: ";
+      std::cerr << code << std::endl;
       return 4;
     }
   }
