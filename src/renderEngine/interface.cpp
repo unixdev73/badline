@@ -121,25 +121,18 @@ Result createRenderEngine(RenderEngineT **const handle,
   if (glfwInit() != GLFW_TRUE)
     return Result::ErrorFailedToInitGLFW;
 
-  *handle = new RenderEngineT{};
-  if (!*handle)
+  if (*handle = new RenderEngineT{}; !*handle)
     return Result::ErrorMemoryAllocationFailure;
 
-  VkInstance instance{};
-  VkResult code{};
-  auto result = createVulkanInstance(appName, debug, &instance, &code);
+  auto result = createVulkanInstance(appName, debug, &(*handle)->instance);
   if (result != re::Result::Success)
     return Result::ErrorVulkanInstanceCreationFailure;
-
-  (*handle)->instance.handle = {
-      instance, [](VkInstance ptr) { vkDestroyInstance(ptr, nullptr); }};
-  (*handle)->instance.title = appName;
-  (*handle)->instance.debug = debug;
 
   VkPhysicalDevice phy{};
   VkDevice dev{};
   VkQueue graph{}, pres{};
-  result = selectOptimalGPU(instance, debug, &phy, &dev, &pres, &graph);
+  result = selectOptimalGPU(
+      (*handle)->instance.handle.get(), debug, &phy, &dev, &pres, &graph);
   if (result != re::Result::Success)
     return result;
 
@@ -324,8 +317,7 @@ UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug) {
 
 Result createVulkanInstance(std::string const &appName,
                             bool debug,
-                            VkInstance *handle,
-                            VkResult *code) {
+                            InstanceT *const instance) {
   VkInstanceCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 
@@ -362,23 +354,23 @@ Result createVulkanInstance(std::string const &appName,
       }
     }
 
-    if (!isAvailable) {
-      // empty for now, TODO: store the list of missing extensions
-      // somewhere in the engine structure and privide an interface
-      // to query the list.
-    }
+    if (!isAvailable)
+      instance->missingReqExts.push_back(req);
   }
 
   char const *validation[] = {"VK_LAYER_KHRONOS_validation"};
   info.ppEnabledLayerNames = debug ? validation : nullptr;
   info.enabledLayerCount = debug ? 1 : 0;
 
-  auto result = vkCreateInstance(&info, nullptr, handle);
+  VkInstance handle{};
+  auto result = vkCreateInstance(&info, nullptr, &handle);
   if (result != VK_SUCCESS) {
-    if (code)
-      *code = result;
+    instance->detailedErrorCode = result;
     return Result::ErrorVulkanInstanceCreationFailure;
   }
+
+  instance->handle = {handle,
+                      [](VkInstance ptr) { vkDestroyInstance(ptr, nullptr); }};
 
   return Result::Success;
 }

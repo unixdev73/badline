@@ -42,7 +42,8 @@ using UniqueSwapchain =
 struct InstanceT {
   UniqueInstance handle{nullptr, nullptr};
   std::string title{};
-  bool debug{false};
+  std::vector<std::string> missingReqExts{};
+  VkResult detailedErrorCode{VK_SUCCESS};
 };
 
 struct DeviceT {
@@ -77,8 +78,7 @@ struct RenderEngineT {
 
 Result createVulkanInstance(std::string const &appName,
                             bool validate,
-                            VkInstance *handle,
-                            VkResult *error);
+                            InstanceT *const instance);
 
 Result selectOptimalGPU(VkInstance const instance,
                         bool const dbg,

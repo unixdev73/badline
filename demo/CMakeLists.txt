@@ -1,9 +1,9 @@
-add_executable(demo
+add_executable(run
 	main.cpp
 )
-setCompileOptions(demo)
+setCompileOptions(run)
 
-target_link_libraries(demo
+target_link_libraries(run
 	argParser
 	renderEngine
 )

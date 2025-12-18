@@ -42,7 +42,9 @@ int main(int const argc, char const *const *const argv) {
 }
 
 namespace demo {
-bool run(App *const) { return 0; }
+bool run(App *const a) {
+  return !(re::run(a->engine.get()) == re::Result::Success);
+}
 
 bool initialize(App *const a) {
   if (a->argc > 1 && initializeArgParser(a))
