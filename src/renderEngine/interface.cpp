@@ -20,7 +20,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/renderEngine.hpp>
 #include "internals.hpp"
-#include <iostream>
 #include <string>
 
 namespace re {
@@ -128,21 +127,8 @@ Result createRenderEngine(RenderEngineT **const handle,
   if (result != re::Result::Success)
     return Result::ErrorVulkanInstanceCreationFailure;
 
-  VkPhysicalDevice phy{};
-  VkDevice dev{};
-  VkQueue graph{}, pres{};
-  result = selectOptimalGPU(
-      (*handle)->instance.handle.get(), debug, &phy, &dev, &pres, &graph);
-  if (result != re::Result::Success)
+  if (result = selectOptimalGPU(*handle); result != re::Result::Success)
     return result;
-
-  (*handle)->device.identifier = phy;
-  (*handle)->device.handle = {dev, [](VkDevice ptr) {
-                                vkDeviceWaitIdle(ptr);
-                                vkDestroyDevice(ptr, 0);
-                              }};
-  (*handle)->device.graphics = graph;
-  (*handle)->device.presentation = pres;
 
   return Result::Success;
 }
@@ -331,9 +317,10 @@ Result createVulkanInstance(std::string const &appName,
       glfwGetRequiredInstanceExtensions(&info.enabledExtensionCount);
 
   if (debug) {
-    std::cout << "Listing requested Vulkan instance extensions by GLFW:\n";
-    for (uint32_t i = 0; i < info.enabledExtensionCount; ++i)
-      std::cout << "\t" << info.ppEnabledExtensionNames[i] << "\n";
+    /*
+for (uint32_t i = 0; i < info.enabledExtensionCount; ++i)
+std::cout << "\t" << info.ppEnabledExtensionNames[i] << "\n";
+            */
   }
 
   uint32_t availableExtCount{};
@@ -375,13 +362,7 @@ Result createVulkanInstance(std::string const &appName,
   return Result::Success;
 }
 
-Result selectOptimalGPU(VkInstance const instance,
-                        bool const dbg,
-                        VkPhysicalDevice *phy,
-                        VkDevice *dev,
-                        VkQueue *presentQ,
-                        VkQueue *graphicsQ) {
-
+Result selectOptimalGPU(RenderEngineT *const engine) {
   uint32_t count{};
   std::vector<VkPhysicalDevice> devs{};
 
@@ -403,6 +384,7 @@ Result selectOptimalGPU(VkInstance const instance,
   };
 
   std::unordered_map<VkPhysicalDevice, QueueInfoDB> devQFams{};
+  auto const instance = engine->instance.handle.get();
 
   vkEnumeratePhysicalDevices(instance, &count, 0);
   if (!count)
@@ -471,12 +453,7 @@ Result selectOptimalGPU(VkInstance const instance,
       currentBest = device;
   }
 
-  auto const &selectedName = devProps.at(currentBest).deviceName;
-  if (dbg)
-    std::cout << "Selected optimal GPU: " << selectedName << std::endl;
-
   auto const &qdb = devQFams.at(currentBest);
-
   VkDeviceCreateInfo devInfo{};
   devInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   devInfo.queueCreateInfoCount =
@@ -505,17 +482,23 @@ Result selectOptimalGPU(VkInstance const instance,
   reqF.wideLines = VK_TRUE;
   devInfo.pEnabledFeatures = &reqF;
 
-  if (auto result = vkCreateDevice(currentBest, &devInfo, 0, dev);
+  VkDevice dev{};
+  if (auto result = vkCreateDevice(currentBest, &devInfo, 0, &dev);
       result != VK_SUCCESS)
     return Result::ErrorVulkanDeviceCreationFailure;
 
-  *phy = currentBest;
-
-  vkGetDeviceQueue(*dev, qCreateInfos.front().queueFamilyIndex, 0, graphicsQ);
-  *presentQ = *graphicsQ;
+  auto &graphicsQ = engine->device.graphics;
+  auto &presentQ = engine->device.presentation;
+  vkGetDeviceQueue(dev, qCreateInfos.front().queueFamilyIndex, 0, &graphicsQ);
+  presentQ = graphicsQ;
   if (qdb.graphics.famIndex != qdb.present.famIndex)
-    vkGetDeviceQueue(*dev, qCreateInfos.back().queueFamilyIndex, 0, presentQ);
+    vkGetDeviceQueue(dev, qCreateInfos.back().queueFamilyIndex, 0, &presentQ);
 
+  engine->device.identifier = currentBest;
+  engine->device.handle = {dev, [](VkDevice ptr) {
+                             vkDeviceWaitIdle(ptr);
+                             vkDestroyDevice(ptr, 0);
+                           }};
   return Result::Success;
 }
 

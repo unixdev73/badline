@@ -80,12 +80,7 @@ Result createVulkanInstance(std::string const &appName,
                             bool validate,
                             InstanceT *const instance);
 
-Result selectOptimalGPU(VkInstance const instance,
-                        bool const dbg,
-                        VkPhysicalDevice *phy,
-                        VkDevice *dev,
-                        VkQueue *present,
-                        VkQueue *graphics);
+Result selectOptimalGPU(RenderEngineT *const engine);
 
 Result
 createWindow(RenderEngineT *const engine, uint32_t width, uint32_t height);
