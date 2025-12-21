@@ -48,7 +48,7 @@ int main(int const argc, char const *const *const argv) {
     }
 
     bool const shV = keyVal.size() == 2 && keyVal[1][0] != 0;
-    auto result = ap::addFlag(parser.get(), keyVal[0], shV ? keyVal[1][0] : 0);
+    auto result = ap::addFlag(handle, keyVal[0], shV ? keyVal[1][0] : 0);
     if (result != ap::Result::Success) {
       std::string code{};
       ap::toString(result, &code);

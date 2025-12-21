@@ -79,7 +79,10 @@ bool initializeArgParser(App *const a) {
     std::size_t pos{};
     ap::getErrorPosition(a->parser.get(), &pos);
     std::string err = a->argv[pos + 1];
-    std::cerr << "Argument parsing failed; Problematic token";
+    std::string errType{};
+    ap::toString(result, &errType);
+    std::cerr << "Argument parsing failed with error code: " << errType
+              << "\n; Problematic token";
     std::cerr << " at position " << pos << ": '" << err << "'" << std::endl;
     return 1;
   }
