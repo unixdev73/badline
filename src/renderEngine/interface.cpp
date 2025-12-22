@@ -180,14 +180,18 @@ Result createWindow(RenderEngineT *const engine,
   engine->window.presentModes.clear();
   uint32_t count{};
   if (auto result = vkGetPhysicalDeviceSurfacePresentModesKHR(
-          engine->device.identifier, engine->window.surface.get(), &count,
+          engine->device.identifier,
+          engine->window.surface.get(),
+          &count,
           nullptr);
       result != VK_SUCCESS)
     return Result::ErrorPresentModesQueryFailure;
 
   engine->window.presentModes.resize(count);
   if (auto result = vkGetPhysicalDeviceSurfacePresentModesKHR(
-          engine->device.identifier, engine->window.surface.get(), &count,
+          engine->device.identifier,
+          engine->window.surface.get(),
+          &count,
           engine->window.presentModes.data());
       result != VK_SUCCESS)
     return Result::ErrorPresentModesFillFailure;
@@ -203,7 +207,8 @@ Result createWindow(RenderEngineT *const engine,
     return Result::ErrorRequestedPresentModeNotAvailable;
 
   if (auto result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-          engine->device.identifier, engine->window.surface.get(),
+          engine->device.identifier,
+          engine->window.surface.get(),
           &engine->window.surfaceCaps);
       result != VK_SUCCESS)
     return Result::ErrorSurfaceCapabilitiesQueryFailure;
@@ -231,7 +236,9 @@ Result createWindow(RenderEngineT *const engine,
 
   engine->window.surfaceFormats.resize(count);
   if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
-          engine->device.identifier, engine->window.surface.get(), &count,
+          engine->device.identifier,
+          engine->window.surface.get(),
+          &count,
           engine->window.surfaceFormats.data());
       result != VK_SUCCESS)
     return Result::ErrorSurfaceFormatQueryFailure;
@@ -263,8 +270,8 @@ Result createWindow(RenderEngineT *const engine,
       VkSurfaceTransformFlagBitsKHR::VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 
   VkSwapchainKHR swapchain{};
-  if (auto result = vkCreateSwapchainKHR(engine->device.handle.get(), &swpInfo,
-                                         0, &swapchain);
+  if (auto result = vkCreateSwapchainKHR(
+          engine->device.handle.get(), &swpInfo, 0, &swapchain);
       result != VK_SUCCESS)
     return Result::ErrorVulkanSwapchainCreationFailure;
 
@@ -273,17 +280,19 @@ Result createWindow(RenderEngineT *const engine,
                                 vkDestroySwapchainKHR(dev, ptr, 0);
                               }};
 
-  if (auto result =
-          vkGetSwapchainImagesKHR(engine->device.handle.get(),
-                                  engine->window.swapchain.get(), &count, 0);
+  if (auto result = vkGetSwapchainImagesKHR(engine->device.handle.get(),
+                                            engine->window.swapchain.get(),
+                                            &count,
+                                            0);
       result != VK_SUCCESS)
     return Result::ErrorSwapchainImageQueryFailure;
 
   engine->window.swapImages.resize(count);
 
-  if (auto result = vkGetSwapchainImagesKHR(
-          engine->device.handle.get(), engine->window.swapchain.get(), &count,
-          engine->window.swapImages.data());
+  if (auto result = vkGetSwapchainImagesKHR(engine->device.handle.get(),
+                                            engine->window.swapchain.get(),
+                                            &count,
+                                            engine->window.swapImages.data());
       result != VK_SUCCESS)
     return Result::ErrorSwapchainImageFillFailure;
 
@@ -316,12 +325,8 @@ Result createVulkanInstance(std::string const &appName,
   info.ppEnabledExtensionNames =
       glfwGetRequiredInstanceExtensions(&info.enabledExtensionCount);
 
-  if (debug) {
-    /*
-for (uint32_t i = 0; i < info.enabledExtensionCount; ++i)
-std::cout << "\t" << info.ppEnabledExtensionNames[i] << "\n";
-            */
-  }
+  for (uint32_t i = 0; i < info.enabledExtensionCount; ++i)
+    instance->requestedExts.push_back(info.ppEnabledExtensionNames[i]);
 
   uint32_t availableExtCount{};
   std::vector<VkExtensionProperties> exts{};

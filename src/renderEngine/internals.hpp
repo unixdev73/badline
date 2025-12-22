@@ -43,6 +43,7 @@ struct InstanceT {
   UniqueInstance handle{nullptr, nullptr};
   std::string title{};
   std::vector<std::string> missingReqExts{};
+  std::vector<std::string> requestedExts{};
   VkResult detailedErrorCode{VK_SUCCESS};
 };
 
