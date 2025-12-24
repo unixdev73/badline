@@ -42,11 +42,11 @@ int main(int const argc, char const *const *const argv) {
 }
 
 namespace demo {
-bool run(App *const a) {
+int run(App *const a) {
   return !(re::run(a->engine.get()) == re::Result::Success);
 }
 
-bool initialize(App *const a) {
+int initialize(App *const a) {
   if (a->argc > 1 && initializeArgParser(a))
     return 1;
 
@@ -64,7 +64,7 @@ bool initialize(App *const a) {
   return 0;
 }
 
-bool initializeArgParser(App *const a) {
+int initializeArgParser(App *const a) {
   a->parser = ap::createArgParser();
   if (!a->parser) {
     std::cerr << "Failed to create arg parser" << std::endl;
@@ -90,41 +90,48 @@ bool initializeArgParser(App *const a) {
   return 0;
 }
 
-bool openWindow(App *const a) {
+int extractWindowArgs(App *const a) {
   std::vector<std::string> const opts = {"width", "height"};
   std::vector<std::string> vals(opts.size(), "");
-  std::size_t width{640}, height{480};
 
-  if (a->argc > 1) {
-    for (std::size_t i = 0; i < opts.size(); ++i) {
-      std::size_t count{};
+  for (std::size_t i = 0; i < opts.size(); ++i) {
+    std::size_t count{};
 
-      auto result = ap::getOptionCount(a->parser.get(), opts[i], &count);
-      if (result != ap::Result::Success) {
-        std::cerr << "Failed to query option count: '" << opts[i];
-        std::cerr << "'" << std::endl;
-        return 1;
-      }
-
-      if (count)
-        ap::getOptionInstanceValue(a->parser.get(), opts[i], 0, &vals[i]);
+    auto result = ap::getOptionCount(a->parser.get(), opts[i], &count);
+    if (result != ap::Result::Success) {
+      std::cerr << "Failed to query option count: '" << opts[i];
+      std::cerr << "'" << std::endl;
+      return 1;
     }
 
-    auto getSize = [&vals](std::size_t const in, std::size_t &out) {
-      if (vals[in].size())
-        try {
-          out = std::stoull(vals[in]);
-        } catch (...) {
-          std::cerr << "Converting: '" << vals[in] << "' to a number failed\n";
-          return 1;
-        }
-      return 0;
-    };
+    if (count)
+      ap::getOptionInstanceValue(a->parser.get(), opts[i], 0, &vals[i]);
+  }
 
-    if (getSize(0, width))
-      return 1;
-    if (getSize(1, height))
-      return 1;
+  auto getSize = [&vals](std::size_t const in, uint32_t &out) {
+    if (vals[in].size())
+      try {
+        out = static_cast<uint32_t>(std::stol(vals[in]));
+      } catch (...) {
+        std::cerr << "Converting: '" << vals[in] << "' to a number failed\n";
+        return 1;
+      }
+    return 0;
+  };
+
+  if (getSize(0, a->windowWidthArg))
+    return 1;
+  if (getSize(1, a->windowHeightArg))
+    return 1;
+  return 0;
+}
+
+int openWindow(App *const a) {
+  std::size_t width{640}, height{480};
+
+  if (a->argc > 1 && extractWindowArgs(a)) {
+    std::cerr << "Failed to extract window args." << std::endl;
+    return 1;
   }
 
   auto result = re::createWindow(a->engine.get(), width, height);
