@@ -90,14 +90,53 @@ int initializeArgParser(App *const a) {
   return 0;
 }
 
+int convertToNumber(std::string const &input, long long *const output) {
+  if (input.size()) {
+    try {
+      *output = std::stoll(input);
+    } catch (...) {
+      std::cerr << "Converting: '" << input << "' to a number failed\n";
+      return 1;
+    }
+  } else
+    *output = 0;
+  return 0;
+}
+
+int convertWindowArgs(App *const a, std::vector<std::string> *const vals) {
+  auto getSize =
+      [&vals](std::size_t const i, uint32_t *const output, long long def) {
+        long long out{};
+        if (convertToNumber(vals->at(i), &out))
+          return 1;
+        if (!out)
+          out = def;
+        *output = out;
+        return 0;
+      };
+
+  if (getSize(0, &a->windowWidthArg, 640)) {
+    std::cerr << "Failed to set window width" << std::endl;
+    return 1;
+  }
+
+  if (getSize(1, &a->windowHeightArg, 480)) {
+    std::cerr << "Failed to set window height" << std::endl;
+    return 1;
+  }
+
+  return 0;
+}
+
 int extractWindowArgs(App *const a) {
   std::vector<std::string> const opts = {"width", "height"};
   std::vector<std::string> vals(opts.size(), "");
+  auto const handle = a->parser.get();
 
   for (std::size_t i = 0; i < opts.size(); ++i) {
     std::size_t count{};
 
-    auto result = ap::getOptionCount(a->parser.get(), opts[i], &count);
+    auto result = ap::getOptionCount(handle, opts[i], &count);
     if (result != ap::Result::Success) {
       std::cerr << "Failed to query option count: '" << opts[i];
       std::cerr << "'" << std::endl;
@@ -105,38 +144,25 @@ int extractWindowArgs(App *const a) {
     }
 
     if (count)
-      ap::getOptionInstanceValue(a->parser.get(), opts[i], 0, &vals[i]);
+      ap::getOptionInstanceValue(handle, opts[i], 0, &vals[i]);
   }
 
-  auto getSize = [&vals](std::size_t const in, uint32_t &out) {
-    if (vals[in].size())
-      try {
-        out = static_cast<uint32_t>(std::stol(vals[in]));
-      } catch (...) {
-        std::cerr << "Converting: '" << vals[in] << "' to a number failed\n";
-        return 1;
-      }
-    return 0;
-  };
-
-  if (getSize(0, a->windowWidthArg))
-    return 1;
-  if (getSize(1, a->windowHeightArg))
-    return 1;
-  return 0;
+  return convertWindowArgs(a, &vals);
 }
 
 int openWindow(App *const a) {
-  std::size_t width{640}, height{480};
-
   if (a->argc > 1 && extractWindowArgs(a)) {
     std::cerr << "Failed to extract window args." << std::endl;
     return 1;
   }
 
+  auto const width = a->windowWidthArg;
+  auto const height = a->windowHeightArg;
+
   auto result = re::createWindow(a->engine.get(), width, height);
   if (result != re::Result::Success) {
     std::string err{};
+    re::toString(result, &err);
     std::cerr << "Window creation failure: " << err << std::endl;
     return 1;
   }
