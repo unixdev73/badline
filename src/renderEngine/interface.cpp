@@ -330,27 +330,7 @@ Result createVulkanInstance(std::string const &appName,
   for (uint32_t i = 0; i < info.enabledExtensionCount; ++i)
     instance->requestedExts.push_back(info.ppEnabledExtensionNames[i]);
 
-  uint32_t availableExtCount{};
-  std::vector<VkExtensionProperties> exts{};
-  vkEnumerateInstanceExtensionProperties(0, &availableExtCount, 0);
-  exts.resize(availableExtCount);
-  vkEnumerateInstanceExtensionProperties(0, &availableExtCount, exts.data());
-
-  for (uint32_t i = 0; i < info.enabledExtensionCount; ++i) {
-    std::string const req = info.ppEnabledExtensionNames[i];
-    bool isAvailable = false;
-
-    for (std::size_t j = 0; j < exts.size(); ++j) {
-      std::string const available = exts[j].extensionName;
-      if (req == available) {
-        isAvailable = true;
-        break;
-      }
-    }
-
-    if (!isAvailable)
-      instance->missingReqExts.push_back(req);
-  }
+  storeMissingInstanceExts(&instance->requestedExts, &instance->missingReqExts);
 
   char const *validation[] = {"VK_LAYER_KHRONOS_validation"};
   info.ppEnabledLayerNames = debug ? validation : nullptr;

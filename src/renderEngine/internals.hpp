@@ -18,6 +18,8 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#pragma once
+
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -85,4 +87,28 @@ Result selectOptimalGPU(RenderEngineT *const engine);
 
 Result
 createWindow(RenderEngineT *const engine, uint32_t width, uint32_t height);
+
+template <typename T>
+std::vector<T> subtract(auto const &minuend, auto const &subtrahend) {
+  std::vector<T> difference{};
+
+  for (auto const &minuendElement : minuend) {
+    bool exists = false;
+
+    for (auto const &subtrahendElement : subtrahend) {
+      if (minuendElement == subtrahendElement) {
+        exists = true;
+        break;
+      }
+    }
+
+    if (!exists)
+      difference.push_back(minuendElement);
+  }
+
+  return difference;
+}
+
+Result storeMissingInstanceExts(std::vector<std::string> const *const requested,
+                                std::vector<std::string> *const missing);
 } // namespace re
