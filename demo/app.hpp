@@ -30,9 +30,6 @@ struct App {
 
   ap::UniqueArgParser parser{0, 0};
   re::UniqueRenderEngine engine{0, 0};
-
-  uint32_t windowWidthArg{};
-  uint32_t windowHeightArg{};
 };
 
 int initialize(App *const);

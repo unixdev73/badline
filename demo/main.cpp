@@ -103,24 +103,24 @@ int convertToNumber(std::string const &input, long long *const output) {
   return 0;
 }
 
-int convertWindowArgs(App *const a, std::vector<std::string> *const vals) {
-  auto getSize =
-      [&vals](std::size_t const i, uint32_t *const output, long long def) {
-        long long out{};
-        if (convertToNumber(vals->at(i), &out))
-          return 1;
-        if (!out)
-          out = def;
-        *output = out;
-        return 0;
-      };
+int convertWindowArgs(std::vector<std::string> *const vals,
+                      uint32_t *const w,
+                      uint32_t *const h) {
+  auto getSize = [&vals](std::size_t const i, uint32_t *const output) {
+    long long out{};
+    if (convertToNumber(vals->at(i), &out))
+      return 1;
+    if (out)
+      *output = out;
+    return 0;
+  };
 
-  if (getSize(0, &a->windowWidthArg, 640)) {
+  if (getSize(0, w)) {
     std::cerr << "Failed to set window width" << std::endl;
     return 1;
   }
 
-  if (getSize(1, &a->windowHeightArg, 480)) {
+  if (getSize(1, h)) {
     std::cerr << "Failed to set window height" << std::endl;
     return 1;
   }
@@ -128,7 +128,7 @@ int convertWindowArgs(App *const a, std::vector<std::string> *const vals) {
   return 0;
 }
 
-int extractWindowArgs(App *const a) {
+int extractWindowArgs(App *const a, uint32_t *const w, uint32_t *const h) {
   std::vector<std::string> const opts = {"width", "height"};
   std::vector<std::string> vals(opts.size(), "");
   auto const handle = a->parser.get();
@@ -147,17 +147,16 @@ int extractWindowArgs(App *const a) {
       ap::getOptionInstanceValue(handle, opts[i], 0, &vals[i]);
   }
 
-  return convertWindowArgs(a, &vals);
+  return convertWindowArgs(&vals, w, h);
 }
 
 int openWindow(App *const a) {
-  if (a->argc > 1 && extractWindowArgs(a)) {
+  uint32_t width{640}, height{480};
+
+  if (a->argc > 1 && extractWindowArgs(a, &width, &height)) {
     std::cerr << "Failed to extract window args." << std::endl;
     return 1;
   }
-
-  auto const width = a->windowWidthArg;
-  auto const height = a->windowHeightArg;
 
   auto result = re::createWindow(a->engine.get(), width, height);
   if (result != re::Result::Success) {

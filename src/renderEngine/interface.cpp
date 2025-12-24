@@ -133,15 +133,17 @@ Result createRenderEngine(RenderEngineT **const handle,
   return Result::Success;
 }
 
-Result run(RenderEngineT *const engine) {
-  if (!engine->window.handle)
+Result run(RenderEngineT *const handle) {
+  if (!handle)
+    return Result::ErrorNullptrHandle;
+  if (!handle->window.handle)
     return Result::ErrorNullptrWindow;
 
-  while (!glfwWindowShouldClose(engine->window.handle.get())) {
+  while (!glfwWindowShouldClose(handle->window.handle.get())) {
     glfwPollEvents();
 
-    if (glfwGetKey(engine->window.handle.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
-      glfwSetWindowShouldClose(engine->window.handle.get(), GLFW_TRUE);
+    if (glfwGetKey(handle->window.handle.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
+      glfwSetWindowShouldClose(handle->window.handle.get(), GLFW_TRUE);
   }
 
   return Result::Success;
