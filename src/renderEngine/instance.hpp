@@ -23,33 +23,26 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#include <string>
 #include <vector>
+#include <memory>
 
 namespace re {
-struct QueueInfo {
-  uint32_t famIndex{};
-  uint32_t count{};
+using UniqueInstance =
+    std::unique_ptr<VkInstance_T, void (*)(VkInstance_T *const)>;
+
+struct InstanceT {
+  UniqueInstance handle{nullptr, nullptr};
+  std::string title{};
+  std::vector<std::string> missingReqExts{};
+  std::vector<std::string> requestedExts{};
+  VkResult detailedErrorCode{VK_SUCCESS};
 };
 
-struct DeviceInfoT {
-  std::vector<VkQueueFamilyProperties> queues{};
-  std::vector<VkExtensionProperties> exts{};
-  VkPhysicalDeviceFeatures feats{};
-  VkPhysicalDeviceProperties props{};
-  QueueInfo graphicsQueue{};
-  QueueInfo presentQueue{};
-};
+Result createVulkanInstance(std::string const &appName,
+                            bool validate,
+                            InstanceT *const instance);
 
-using UniqueDevice = std::unique_ptr<VkDevice_T, void (*)(VkDevice_T *const)>;
-
-struct DeviceT {
-  VkPhysicalDevice identifier{VK_NULL_HANDLE};
-  UniqueDevice handle{nullptr, nullptr};
-  VkQueue presentation{VK_NULL_HANDLE};
-  VkQueue graphics{VK_NULL_HANDLE};
-};
-
-Result selectOptimalGPU(RenderEngineT *const engine);
-
-DeviceInfoT queryDeviceInfo(VkPhysicalDevice_T *const handle);
+Result storeMissingInstanceExts(std::vector<std::string> const *const requested,
+                                std::vector<std::string> *const missing);
 } // namespace re

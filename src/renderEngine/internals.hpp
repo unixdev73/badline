@@ -20,95 +20,19 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <badline/renderEngine.hpp>
-#include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>
-#include <functional>
+#include <string>
 #include <memory>
 
 namespace re {
-using UniqueInstance =
-    std::unique_ptr<VkInstance_T, void (*)(VkInstance_T *const)>;
-
-using UniqueDevice = std::unique_ptr<VkDevice_T, void (*)(VkDevice_T *const)>;
-
-using UniqueWindow = std::unique_ptr<GLFWwindow, void (*)(GLFWwindow *const)>;
-
-using UniqueSurface =
-    std::unique_ptr<VkSurfaceKHR_T, std::function<void(VkSurfaceKHR_T *const)>>;
-
-using UniqueSwapchain =
-    std::unique_ptr<VkSwapchainKHR_T,
-                    std::function<void(VkSwapchainKHR_T *const)>>;
-
-struct InstanceT {
-  UniqueInstance handle{nullptr, nullptr};
-  std::string title{};
-  std::vector<std::string> missingReqExts{};
-  std::vector<std::string> requestedExts{};
-  VkResult detailedErrorCode{VK_SUCCESS};
-};
-
-struct DeviceT {
-  VkPhysicalDevice identifier{VK_NULL_HANDLE};
-  UniqueDevice handle{nullptr, nullptr};
-  VkQueue presentation{VK_NULL_HANDLE};
-  VkQueue graphics{VK_NULL_HANDLE};
-};
-
-struct WindowT {
-  UniqueWindow handle{nullptr, nullptr};
-  uint32_t width{}, height{};
-
-  UniqueSurface surface{nullptr, nullptr};
-  std::vector<VkSurfaceFormatKHR> surfaceFormats{};
-  VkSurfaceFormatKHR surfaceFormat{};
-  VkSurfaceCapabilitiesKHR surfaceCaps{};
-
-  VkPresentModeKHR presentMode{VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR};
-  std::vector<VkPresentModeKHR> presentModes{};
-
-  UniqueSwapchain swapchain{nullptr, nullptr};
-  std::vector<VkImage> swapImages{};
-};
+struct InstanceT;
+struct WindowT;
+struct DeviceT;
 
 struct RenderEngineT {
-  InstanceT instance{};
-  DeviceT device{};
-  WindowT window{};
+  std::unique_ptr<InstanceT> instance{};
+  std::unique_ptr<DeviceT> device{};
+  std::unique_ptr<WindowT> window{};
+
   std::string errorMessage{};
 };
-
-Result createVulkanInstance(std::string const &appName,
-                            bool validate,
-                            InstanceT *const instance);
-
-Result selectOptimalGPU(RenderEngineT *const engine);
-
-Result
-createWindow(RenderEngineT *const engine, uint32_t width, uint32_t height);
-
-template <typename T>
-std::vector<T> subtract(auto const &minuend, auto const &subtrahend) {
-  std::vector<T> difference{};
-
-  for (auto const &minuendElement : minuend) {
-    bool exists = false;
-
-    for (auto const &subtrahendElement : subtrahend) {
-      if (minuendElement == subtrahendElement) {
-        exists = true;
-        break;
-      }
-    }
-
-    if (!exists)
-      difference.push_back(minuendElement);
-  }
-
-  return difference;
-}
-
-Result storeMissingInstanceExts(std::vector<std::string> const *const requested,
-                                std::vector<std::string> *const missing);
 } // namespace re

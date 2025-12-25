@@ -9,6 +9,7 @@ add_library(renderEngine
 	interface.cpp
 	instance.cpp
 	device.cpp
+	window.cpp
 )
 setCompileOptions(renderEngine)
 

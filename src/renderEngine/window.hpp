@@ -23,33 +23,36 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
-#include <vector>
+#include <functional>
+#include <memory>
 
 namespace re {
-struct QueueInfo {
-  uint32_t famIndex{};
-  uint32_t count{};
+using UniqueWindow = std::unique_ptr<GLFWwindow, void (*)(GLFWwindow *const)>;
+
+using UniqueSurface =
+    std::unique_ptr<VkSurfaceKHR_T, std::function<void(VkSurfaceKHR_T *const)>>;
+
+using UniqueSwapchain =
+    std::unique_ptr<VkSwapchainKHR_T,
+                    std::function<void(VkSwapchainKHR_T *const)>>;
+
+struct WindowT {
+  UniqueWindow handle{nullptr, nullptr};
+  uint32_t width{}, height{};
+
+  UniqueSurface surface{nullptr, nullptr};
+  std::vector<VkSurfaceFormatKHR> surfaceFormats{};
+  VkSurfaceFormatKHR surfaceFormat{};
+  VkSurfaceCapabilitiesKHR surfaceCaps{};
+
+  VkPresentModeKHR presentMode{VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR};
+  std::vector<VkPresentModeKHR> presentModes{};
+
+  UniqueSwapchain swapchain{nullptr, nullptr};
+  std::vector<VkImage> swapImages{};
 };
 
-struct DeviceInfoT {
-  std::vector<VkQueueFamilyProperties> queues{};
-  std::vector<VkExtensionProperties> exts{};
-  VkPhysicalDeviceFeatures feats{};
-  VkPhysicalDeviceProperties props{};
-  QueueInfo graphicsQueue{};
-  QueueInfo presentQueue{};
-};
+Result
+createWindow(RenderEngineT *const engine, uint32_t width, uint32_t height);
 
-using UniqueDevice = std::unique_ptr<VkDevice_T, void (*)(VkDevice_T *const)>;
-
-struct DeviceT {
-  VkPhysicalDevice identifier{VK_NULL_HANDLE};
-  UniqueDevice handle{nullptr, nullptr};
-  VkQueue presentation{VK_NULL_HANDLE};
-  VkQueue graphics{VK_NULL_HANDLE};
-};
-
-Result selectOptimalGPU(RenderEngineT *const engine);
-
-DeviceInfoT queryDeviceInfo(VkPhysicalDevice_T *const handle);
 } // namespace re

@@ -20,36 +20,27 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <badline/renderEngine.hpp>
-#include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>
 #include <vector>
 
 namespace re {
-struct QueueInfo {
-  uint32_t famIndex{};
-  uint32_t count{};
-};
+template <typename T>
+std::vector<T> subtract(auto const &minuend, auto const &subtrahend) {
+  std::vector<T> difference{};
 
-struct DeviceInfoT {
-  std::vector<VkQueueFamilyProperties> queues{};
-  std::vector<VkExtensionProperties> exts{};
-  VkPhysicalDeviceFeatures feats{};
-  VkPhysicalDeviceProperties props{};
-  QueueInfo graphicsQueue{};
-  QueueInfo presentQueue{};
-};
+  for (auto const &minuendElement : minuend) {
+    bool exists = false;
 
-using UniqueDevice = std::unique_ptr<VkDevice_T, void (*)(VkDevice_T *const)>;
+    for (auto const &subtrahendElement : subtrahend) {
+      if (minuendElement == subtrahendElement) {
+        exists = true;
+        break;
+      }
+    }
 
-struct DeviceT {
-  VkPhysicalDevice identifier{VK_NULL_HANDLE};
-  UniqueDevice handle{nullptr, nullptr};
-  VkQueue presentation{VK_NULL_HANDLE};
-  VkQueue graphics{VK_NULL_HANDLE};
-};
+    if (!exists)
+      difference.push_back(minuendElement);
+  }
 
-Result selectOptimalGPU(RenderEngineT *const engine);
-
-DeviceInfoT queryDeviceInfo(VkPhysicalDevice_T *const handle);
+  return difference;
+}
 } // namespace re

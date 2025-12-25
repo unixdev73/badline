@@ -20,7 +20,9 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/renderEngine.hpp>
 #include "internals.hpp"
-#include <string>
+#include "instance.hpp"
+#include "device.hpp"
+#include "window.hpp"
 
 namespace re {
 Result createRenderEngine(RenderEngineT **const handle,
@@ -35,7 +37,11 @@ Result createRenderEngine(RenderEngineT **const handle,
   if (*handle = new RenderEngineT{}; !*handle)
     return Result::ErrorMemoryAllocationFailure;
 
-  auto result = createVulkanInstance(appName, debug, &(*handle)->instance);
+	(*handle)->instance = std::make_unique<InstanceT>();
+	(*handle)->device = std::make_unique<DeviceT>();
+	(*handle)->window = std::make_unique<WindowT>();
+
+  auto result = createVulkanInstance(appName, debug, (*handle)->instance.get());
   if (result != re::Result::Success)
     return Result::ErrorVulkanInstanceCreationFailure;
 
@@ -59,167 +65,15 @@ UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug) {
 Result run(RenderEngineT *const handle) {
   if (!handle)
     return Result::ErrorNullptrHandle;
-  if (!handle->window.handle)
+  if (!handle->window->handle)
     return Result::ErrorNullptrWindow;
 
-  while (!glfwWindowShouldClose(handle->window.handle.get())) {
+  while (!glfwWindowShouldClose(handle->window->handle.get())) {
     glfwPollEvents();
 
-    if (glfwGetKey(handle->window.handle.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
-      glfwSetWindowShouldClose(handle->window.handle.get(), GLFW_TRUE);
+    if (glfwGetKey(handle->window->handle.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
+      glfwSetWindowShouldClose(handle->window->handle.get(), GLFW_TRUE);
   }
-
-  return Result::Success;
-}
-
-Result createWindow(RenderEngineT *const engine,
-                    uint32_t const width,
-                    uint32_t const height) {
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-
-  GLFWwindow *win =
-      glfwCreateWindow(width, height, engine->instance.title.c_str(), 0, 0);
-  if (!win)
-    return Result::ErrorGLFWindowCreationFailure;
-
-  engine->window.handle = {win, [](GLFWwindow *const ptr) {
-                             if (ptr)
-                               glfwDestroyWindow(ptr);
-                           }};
-  engine->window.width = width;
-  engine->window.height = height;
-
-  VkSurfaceKHR surf{};
-  if (auto result =
-          glfwCreateWindowSurface(engine->instance.handle.get(), win, 0, &surf);
-      result != VK_SUCCESS)
-    return Result::ErrorVulkanSurfaceCreationFailure;
-
-  auto inst = engine->instance.handle.get();
-  engine->window.surface = {surf, [inst](VkSurfaceKHR_T *const ptr) {
-                              if (ptr)
-                                vkDestroySurfaceKHR(inst, ptr, 0);
-                            }};
-
-  engine->window.presentModes.clear();
-  uint32_t count{};
-  if (auto result = vkGetPhysicalDeviceSurfacePresentModesKHR(
-          engine->device.identifier,
-          engine->window.surface.get(),
-          &count,
-          nullptr);
-      result != VK_SUCCESS)
-    return Result::ErrorPresentModesQueryFailure;
-
-  engine->window.presentModes.resize(count);
-  if (auto result = vkGetPhysicalDeviceSurfacePresentModesKHR(
-          engine->device.identifier,
-          engine->window.surface.get(),
-          &count,
-          engine->window.presentModes.data());
-      result != VK_SUCCESS)
-    return Result::ErrorPresentModesFillFailure;
-
-  bool found = false;
-  for (auto mode : engine->window.presentModes) {
-    if (mode == engine->window.presentMode) {
-      found = true;
-      break;
-    }
-  }
-  if (!found)
-    return Result::ErrorRequestedPresentModeNotAvailable;
-
-  if (auto result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-          engine->device.identifier,
-          engine->window.surface.get(),
-          &engine->window.surfaceCaps);
-      result != VK_SUCCESS)
-    return Result::ErrorSurfaceCapabilitiesQueryFailure;
-
-  auto numberOfImages = engine->window.surfaceCaps.minImageCount + 1;
-  if ((engine->window.surfaceCaps.maxImageCount > 0) &&
-      (numberOfImages > engine->window.surfaceCaps.maxImageCount)) {
-    numberOfImages = engine->window.surfaceCaps.maxImageCount;
-  }
-
-  if (engine->window.width > engine->window.surfaceCaps.maxImageExtent.width)
-    return Result::ErrorRequestedSurfaceWidthTooLarge;
-
-  if (engine->window.height > engine->window.surfaceCaps.maxImageExtent.height)
-    return Result::ErrorRequestedSurfaceHeightTooLarge;
-
-  if (!(engine->window.surfaceCaps.supportedUsageFlags &
-        VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
-    return Result::ErrorColorAttachmentBitNotSupported;
-
-  if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
-          engine->device.identifier, engine->window.surface.get(), &count, 0);
-      result != VK_SUCCESS)
-    return Result::ErrorSurfaceFormatQueryFailure;
-
-  engine->window.surfaceFormats.resize(count);
-  if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
-          engine->device.identifier,
-          engine->window.surface.get(),
-          &count,
-          engine->window.surfaceFormats.data());
-      result != VK_SUCCESS)
-    return Result::ErrorSurfaceFormatQueryFailure;
-
-  if ((1 == engine->window.surfaceFormats.size()) &&
-      (VK_FORMAT_UNDEFINED == engine->window.surfaceFormats[0].format)) {
-    engine->window.surfaceFormat.format = VK_FORMAT_R8G8B8A8_UNORM;
-    engine->window.surfaceFormat.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-  } else if (engine->window.surfaceFormats.size()) {
-    engine->window.surfaceFormat = engine->window.surfaceFormats[0];
-  } else
-    return Result::ErrorNoSurfaceFormatsAvailable;
-
-  VkSwapchainCreateInfoKHR swpInfo{};
-  swpInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  swpInfo.compositeAlpha =
-      VkCompositeAlphaFlagBitsKHR::VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  swpInfo.imageArrayLayers = 1;
-  swpInfo.clipped = VK_TRUE;
-  swpInfo.imageColorSpace = engine->window.surfaceFormat.colorSpace;
-  swpInfo.imageFormat = engine->window.surfaceFormat.format;
-  swpInfo.imageExtent = VkExtent2D{width, height};
-  swpInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  swpInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-  swpInfo.surface = engine->window.surface.get();
-  swpInfo.presentMode = engine->window.presentMode;
-  swpInfo.minImageCount = numberOfImages;
-  swpInfo.preTransform =
-      VkSurfaceTransformFlagBitsKHR::VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-
-  VkSwapchainKHR swapchain{};
-  if (auto result = vkCreateSwapchainKHR(
-          engine->device.handle.get(), &swpInfo, 0, &swapchain);
-      result != VK_SUCCESS)
-    return Result::ErrorVulkanSwapchainCreationFailure;
-
-  auto dev = engine->device.handle.get();
-  engine->window.swapchain = {swapchain, [dev](VkSwapchainKHR_T *const ptr) {
-                                vkDestroySwapchainKHR(dev, ptr, 0);
-                              }};
-
-  if (auto result = vkGetSwapchainImagesKHR(engine->device.handle.get(),
-                                            engine->window.swapchain.get(),
-                                            &count,
-                                            0);
-      result != VK_SUCCESS)
-    return Result::ErrorSwapchainImageQueryFailure;
-
-  engine->window.swapImages.resize(count);
-
-  if (auto result = vkGetSwapchainImagesKHR(engine->device.handle.get(),
-                                            engine->window.swapchain.get(),
-                                            &count,
-                                            engine->window.swapImages.data());
-      result != VK_SUCCESS)
-    return Result::ErrorSwapchainImageFillFailure;
 
   return Result::Success;
 }
@@ -309,6 +163,19 @@ Result toString(Result const result, std::string *const output) {
     break;
   }
 
+  return Result::Success;
+}
+
+Result getErrorMessage(RenderEngineT const *const handle,
+                       std::string *const message) {
+  if (!handle)
+    return Result::ErrorNullptrHandle;
+  if (!message)
+    return Result::ErrorNullptrMessage;
+  if (handle->errorMessage.empty())
+    return Result::ErrorNoErrorMessage;
+
+  *message = handle->errorMessage;
   return Result::Success;
 }
 } // namespace re

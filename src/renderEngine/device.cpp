@@ -18,7 +18,9 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include <unordered_map>
 #include "internals.hpp"
+#include "instance.hpp"
 #include "device.hpp"
 
 namespace re {
@@ -102,7 +104,7 @@ selectOptimalDevice(
 }
 
 Result selectOptimalGPU(RenderEngineT *const engine) {
-  auto devs = queryEligibleDevices(engine->instance.handle.get());
+  auto devs = queryEligibleDevices(engine->instance->handle.get());
   if (!devs.size())
     return Result::ErrorNoVulkanDevicesAvailable;
 
@@ -141,31 +143,18 @@ Result selectOptimalGPU(RenderEngineT *const engine) {
       result != VK_SUCCESS)
     return Result::ErrorVulkanDeviceCreationFailure;
 
-  auto &graphicsQ = engine->device.graphics;
-  auto &presentQ = engine->device.presentation;
+  auto &graphicsQ = engine->device->graphics;
+  auto &presentQ = engine->device->presentation;
   vkGetDeviceQueue(dev, qCreateInfos.front().queueFamilyIndex, 0, &graphicsQ);
   presentQ = graphicsQ;
   if (devInfo.graphicsQueue.famIndex != devInfo.presentQueue.famIndex)
     vkGetDeviceQueue(dev, qCreateInfos.back().queueFamilyIndex, 0, &presentQ);
 
-  engine->device.identifier = phy;
-  engine->device.handle = {dev, [](VkDevice ptr) {
-                             vkDeviceWaitIdle(ptr);
-                             vkDestroyDevice(ptr, 0);
-                           }};
-  return Result::Success;
-}
-
-Result getErrorMessage(RenderEngineT const *const handle,
-                       std::string *const message) {
-  if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (!message)
-    return Result::ErrorNullptrMessage;
-  if (handle->errorMessage.empty())
-    return Result::ErrorNoErrorMessage;
-
-  *message = handle->errorMessage;
+  engine->device->identifier = phy;
+  engine->device->handle = {dev, [](VkDevice ptr) {
+                              vkDeviceWaitIdle(ptr);
+                              vkDestroyDevice(ptr, 0);
+                            }};
   return Result::Success;
 }
 } // namespace re
