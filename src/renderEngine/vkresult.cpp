@@ -18,26 +18,15 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#pragma once
-
-#include <vulkan/vulkan.h>
-#include <string>
-#include <memory>
+#include "vkresult.hpp"
 
 namespace re {
-struct InstanceT;
-struct DeviceT;
-struct WindowT;
+Result toString(VkResult const result, std::string *const output) {
+  std::string asStr = string_VkResult(result);
+  if (asStr == "Unhandled VkResult")
+    return Result::ErrorVulkanResultMappingFailure;
 
-struct RenderEngineT {
-  std::unique_ptr<InstanceT> instance{};
-  std::unique_ptr<DeviceT> device{};
-  std::unique_ptr<WindowT> window{};
-
-  std::string errorMessage{};
-};
-
-void setErrMsg(RenderEngineT *const engine,
-               std::string const &msg,
-               VkResult r = VkResult::VK_SUCCESS);
+  *output = std::move(asStr);
+  return Result::Success;
+}
 } // namespace re

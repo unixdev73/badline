@@ -20,24 +20,10 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include <badline/renderEngine.hpp>
+#include <vulkan/vk_enum_string_helper.h>
 #include <string>
-#include <memory>
 
 namespace re {
-struct InstanceT;
-struct DeviceT;
-struct WindowT;
-
-struct RenderEngineT {
-  std::unique_ptr<InstanceT> instance{};
-  std::unique_ptr<DeviceT> device{};
-  std::unique_ptr<WindowT> window{};
-
-  std::string errorMessage{};
-};
-
-void setErrMsg(RenderEngineT *const engine,
-               std::string const &msg,
-               VkResult r = VkResult::VK_SUCCESS);
+Result toString(VkResult const result, std::string *const output);
 } // namespace re

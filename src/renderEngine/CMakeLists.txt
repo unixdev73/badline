@@ -7,7 +7,9 @@ target_compile_options(vulkanMemoryAllocator PRIVATE -w)
 
 add_library(renderEngine
 	interface.cpp
+	vkresult.cpp
 	instance.cpp
+	engine.cpp
 	device.cpp
 	window.cpp
 )

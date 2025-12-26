@@ -45,7 +45,7 @@ Result createRenderEngine(RenderEngineT **const handle,
   if (result != re::Result::Success)
     return Result::ErrorVulkanInstanceCreationFailure;
 
-  if (result = selectOptimalGPU(*handle); result != re::Result::Success)
+  if (result = createOptimalGPU(*handle); result != re::Result::Success)
     return result;
 
   return Result::Success;
@@ -157,6 +157,15 @@ Result toString(Result const result, std::string *const output) {
     break;
   case Result::ErrorSwapchainImageFillFailure:
     *output = "ErrorSwapchainImageFillFailure";
+    break;
+  case Result::ErrorVulkanCommandPoolCreationFailure:
+    *output = "ErrorVulkanCommandPoolCreationFailure";
+    break;
+  case Result::ErrorVulkanResultMappingFailure:
+    *output = "ErrorVulkanResultMappingFailure";
+    break;
+  case Result::ErrorVulkanCommandBufferAllocationFailure:
+    *output = "ErrorVulkanCommandBufferAllocationFailure";
     break;
   case Result::ErrorNoErrorMessage:
     *output = "ErrorNoErrorMessage";

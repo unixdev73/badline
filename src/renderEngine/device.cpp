@@ -103,58 +103,156 @@ selectOptimalDevice(
   return currentBest;
 }
 
-Result selectOptimalGPU(RenderEngineT *const engine) {
-  auto devs = queryEligibleDevices(engine->instance->handle.get());
-  if (!devs.size())
-    return Result::ErrorNoVulkanDevicesAvailable;
-
-  auto const &[phy, devInfo] = *selectOptimalDevice(devs);
-
-  VkDeviceCreateInfo devCreateInfo{};
-  devCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  devCreateInfo.queueCreateInfoCount =
-      (devInfo.graphicsQueue.famIndex == devInfo.presentQueue.famIndex) ? 1 : 2;
+Result setupCreateInfo(VkDeviceCreateInfo *const devCreateInfo,
+                       std::vector<VkDeviceQueueCreateInfo> *const qCreateInfos,
+                       VkPhysicalDeviceFeatures *const features,
+                       DeviceInfoT const *const devInfo) {
+  devCreateInfo->sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  devCreateInfo->queueCreateInfoCount =
+      (devInfo->graphicsQueue.famIndex == devInfo->presentQueue.famIndex) ? 1
+                                                                          : 2;
 
   static char const *exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-  devCreateInfo.enabledExtensionCount = sizeof(exts) / sizeof(exts[0]);
-  devCreateInfo.ppEnabledExtensionNames = exts;
+  devCreateInfo->enabledExtensionCount = sizeof(exts) / sizeof(exts[0]);
+  devCreateInfo->ppEnabledExtensionNames = exts;
 
-  std::vector<VkDeviceQueueCreateInfo> qCreateInfos;
   static const float prio = 1.f;
   VkDeviceQueueCreateInfo q{};
   q.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
   q.queueCount = 1;
-  q.queueFamilyIndex = devInfo.graphicsQueue.famIndex;
+  q.queueFamilyIndex = devInfo->graphicsQueue.famIndex;
   q.pQueuePriorities = &prio;
-  qCreateInfos.push_back(q);
+  qCreateInfos->push_back(q);
 
-  if (devInfo.graphicsQueue.famIndex != devInfo.presentQueue.famIndex) {
-    q.queueFamilyIndex = devInfo.presentQueue.famIndex;
-    qCreateInfos.push_back(q);
+  if (devInfo->graphicsQueue.famIndex != devInfo->presentQueue.famIndex) {
+    q.queueFamilyIndex = devInfo->presentQueue.famIndex;
+    qCreateInfos->push_back(q);
   }
-  devCreateInfo.pQueueCreateInfos = qCreateInfos.data();
+  devCreateInfo->pQueueCreateInfos = qCreateInfos->data();
 
-  VkPhysicalDeviceFeatures reqF{};
-  reqF.wideLines = VK_TRUE;
-  devCreateInfo.pEnabledFeatures = &reqF;
+  features->wideLines = VK_TRUE;
+  return Result::Success;
+}
 
+Result createCommandPools(RenderEngineT *const engine) {
+  VkCommandPoolCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+               VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+  auto const dev = engine->device->handle.get();
+  VkCommandPool pool{};
+
+  info.queueFamilyIndex = engine->device->graphicsFamIndex;
+  auto result = vkCreateCommandPool(dev, &info, 0, &pool);
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create command pool", result);
+    return Result::ErrorVulkanCommandPoolCreationFailure;
+  }
+  engine->device->graphicsCmdPool = {pool, [dev](VkCommandPool_T *const p) {
+                                       vkDestroyCommandPool(dev, p, 0);
+                                     }};
+
+  info.queueFamilyIndex = engine->device->presentFamIndex;
+  result = vkCreateCommandPool(dev, &info, 0, &pool);
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create command pool", result);
+    return Result::ErrorVulkanCommandPoolCreationFailure;
+  }
+  engine->device->presentCmdPool = {pool, [dev](VkCommandPool_T *const p) {
+                                      vkDestroyCommandPool(dev, p, 0);
+                                    }};
+
+  return Result::Success;
+}
+
+Result allocateCommandBuffers(RenderEngineT *const engine) {
+  VkCommandBufferAllocateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  info.commandBufferCount = 1;
+  info.commandPool = engine->device->graphicsCmdPool.get();
+  info.level = VkCommandBufferLevel::VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+  auto const dev = engine->device->handle.get();
+  VkCommandBuffer buff{};
+
+  auto result = vkAllocateCommandBuffers(dev, &info, &buff);
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to allocate cmd buffer", result);
+    return Result::ErrorVulkanCommandBufferAllocationFailure;
+  }
+  engine->device->graphicsBuff = buff;
+
+  info.commandPool = engine->device->presentCmdPool.get();
+  result = vkAllocateCommandBuffers(dev, &info, &buff);
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to allocate cmd buffer", result);
+    return Result::ErrorVulkanCommandBufferAllocationFailure;
+  }
+  engine->device->presentBuff = buff;
+
+  return Result::Success;
+}
+
+Result createDeviceResources(RenderEngineT *const engine) {
+  if (auto r = createCommandPools(engine); r != Result::Success)
+    return r;
+
+  if (auto r = allocateCommandBuffers(engine); r != Result::Success)
+    return r;
+  return Result::Success;
+}
+
+Result createLogicalDevice(RenderEngineT *const engine,
+                           VkDeviceCreateInfo const *const info,
+                           VkPhysicalDevice const phy,
+                           DeviceInfoT const *const devInfo) {
   VkDevice dev{};
-  if (auto result = vkCreateDevice(phy, &devCreateInfo, 0, &dev);
-      result != VK_SUCCESS)
+  if (auto result = vkCreateDevice(phy, info, 0, &dev); result != VK_SUCCESS)
     return Result::ErrorVulkanDeviceCreationFailure;
 
   auto &graphicsQ = engine->device->graphics;
-  auto &presentQ = engine->device->presentation;
-  vkGetDeviceQueue(dev, qCreateInfos.front().queueFamilyIndex, 0, &graphicsQ);
+  auto &presentQ = engine->device->present;
+
+  engine->device->graphicsFamIndex = devInfo->graphicsQueue.famIndex;
+  engine->device->presentFamIndex = devInfo->presentQueue.famIndex;
+
+  vkGetDeviceQueue(dev, devInfo->graphicsQueue.famIndex, 0, &graphicsQ);
   presentQ = graphicsQ;
-  if (devInfo.graphicsQueue.famIndex != devInfo.presentQueue.famIndex)
-    vkGetDeviceQueue(dev, qCreateInfos.back().queueFamilyIndex, 0, &presentQ);
+
+  if (devInfo->graphicsQueue.famIndex != devInfo->presentQueue.famIndex)
+    vkGetDeviceQueue(dev, devInfo->presentQueue.famIndex, 0, &presentQ);
 
   engine->device->identifier = phy;
   engine->device->handle = {dev, [](VkDevice ptr) {
                               vkDeviceWaitIdle(ptr);
                               vkDestroyDevice(ptr, 0);
                             }};
+
+  if (auto r = createDeviceResources(engine); r != Result::Success)
+    return r;
+  return Result::Success;
+}
+
+Result createOptimalGPU(RenderEngineT *const engine) {
+  auto devs = queryEligibleDevices(engine->instance->handle.get());
+  if (!devs.size())
+    return Result::ErrorNoVulkanDevicesAvailable;
+
+  auto const &[phy, devInfo] = *selectOptimalDevice(devs);
+  std::vector<VkDeviceQueueCreateInfo> qCreateInfos;
+  VkDeviceCreateInfo devCreateInfo{};
+  VkPhysicalDeviceFeatures reqF{};
+  devCreateInfo.pEnabledFeatures = &reqF;
+
+  if (auto r = setupCreateInfo(&devCreateInfo, &qCreateInfos, &reqF, &devInfo);
+      r != Result::Success)
+    return r;
+
+  if (auto r = createLogicalDevice(engine, &devCreateInfo, phy, &devInfo);
+      r != Result::Success)
+    return r;
+
   return Result::Success;
 }
 } // namespace re

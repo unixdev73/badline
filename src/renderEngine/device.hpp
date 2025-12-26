@@ -20,9 +20,11 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
+#include "vulkan/vulkan_core.h"
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#include <functional>
 #include <vector>
 
 namespace re {
@@ -40,16 +42,29 @@ struct DeviceInfoT {
   QueueInfo presentQueue{};
 };
 
-using UniqueDevice = std::unique_ptr<VkDevice_T, void (*)(VkDevice_T *const)>;
+template <typename T> using Deleter = std::function<void(T *const)>;
+
+using UniqueDevice = std::unique_ptr<VkDevice_T, Deleter<VkDevice_T>>;
+
+using UniqueCmdPool =
+    std::unique_ptr<VkCommandPool_T, Deleter<VkCommandPool_T>>;
 
 struct DeviceT {
   VkPhysicalDevice identifier{VK_NULL_HANDLE};
   UniqueDevice handle{nullptr, nullptr};
-  VkQueue presentation{VK_NULL_HANDLE};
+
+  VkQueue present{VK_NULL_HANDLE};
+  uint32_t presentFamIndex{};
+  UniqueCmdPool presentCmdPool{nullptr, nullptr};
+  VkCommandBuffer presentBuff{VK_NULL_HANDLE};
+
   VkQueue graphics{VK_NULL_HANDLE};
+  uint32_t graphicsFamIndex{};
+  UniqueCmdPool graphicsCmdPool{nullptr, nullptr};
+  VkCommandBuffer graphicsBuff{VK_NULL_HANDLE};
 };
 
-Result selectOptimalGPU(RenderEngineT *const engine);
+Result createOptimalGPU(RenderEngineT *const engine);
 
 DeviceInfoT queryDeviceInfo(VkPhysicalDevice_T *const handle);
 } // namespace re
