@@ -26,7 +26,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 namespace re {
 Result createRenderEngine(RenderEngineT **const handle,
-                          std::string const &appName,
+                          std::string const &name,
                           bool debug) {
   if (!handle)
     return Result::ErrorNullptrHandle;
@@ -37,16 +37,11 @@ Result createRenderEngine(RenderEngineT **const handle,
   if (*handle = new RenderEngineT{}; !*handle)
     return Result::ErrorMemoryAllocationFailure;
 
-	(*handle)->instance = std::make_unique<InstanceT>();
-	(*handle)->device = std::make_unique<DeviceT>();
-	(*handle)->window = std::make_unique<WindowT>();
+  if (auto r = createVulkanInstance(*handle, name, debug); r != Result::Success)
+    return r;
 
-  auto result = createVulkanInstance(appName, debug, (*handle)->instance.get());
-  if (result != re::Result::Success)
-    return Result::ErrorVulkanInstanceCreationFailure;
-
-  if (result = createOptimalGPU(*handle); result != re::Result::Success)
-    return result;
+  if (auto r = createOptimalGPU(*handle); r != Result::Success)
+    return r;
 
   return Result::Success;
 }

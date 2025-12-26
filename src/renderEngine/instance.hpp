@@ -36,12 +36,11 @@ struct InstanceT {
   std::string title{};
   std::vector<std::string> missingReqExts{};
   std::vector<std::string> requestedExts{};
-  VkResult detailedErrorCode{VK_SUCCESS};
 };
 
-Result createVulkanInstance(std::string const &appName,
-                            bool validate,
-                            InstanceT *const instance);
+Result createVulkanInstance(RenderEngineT *const engine,
+                            std::string const &appName,
+                            bool validate);
 
 Result storeMissingInstanceExts(std::vector<std::string> const *const requested,
                                 std::vector<std::string> *const missing);

@@ -20,11 +20,12 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/subtract.hpp>
 #include "instance.hpp"
+#include "engine.hpp"
 
 namespace re {
-Result createVulkanInstance(std::string const &appName,
-                            bool debug,
-                            InstanceT *const instance) {
+Result createVulkanInstance(RenderEngineT *const engine,
+                            std::string const &appName,
+                            bool debug) {
   VkInstanceCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 
@@ -36,6 +37,9 @@ Result createVulkanInstance(std::string const &appName,
 
   info.ppEnabledExtensionNames =
       glfwGetRequiredInstanceExtensions(&info.enabledExtensionCount);
+
+  auto &instance = engine->instance;
+  instance = std::make_unique<InstanceT>();
 
   for (uint32_t i = 0; i < info.enabledExtensionCount; ++i)
     instance->requestedExts.push_back(info.ppEnabledExtensionNames[i]);
@@ -49,7 +53,7 @@ Result createVulkanInstance(std::string const &appName,
   VkInstance handle{};
   auto result = vkCreateInstance(&info, nullptr, &handle);
   if (result != VK_SUCCESS) {
-    instance->detailedErrorCode = result;
+    setErrMsg(engine, "Failed to create vulkan instance", result);
     return Result::ErrorVulkanInstanceCreationFailure;
   }
 

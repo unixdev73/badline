@@ -208,8 +208,10 @@ Result createLogicalDevice(RenderEngineT *const engine,
                            VkPhysicalDevice const phy,
                            DeviceInfoT const *const devInfo) {
   VkDevice dev{};
-  if (auto result = vkCreateDevice(phy, info, 0, &dev); result != VK_SUCCESS)
+  if (auto result = vkCreateDevice(phy, info, 0, &dev); result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create device", result);
     return Result::ErrorVulkanDeviceCreationFailure;
+  }
 
   auto &graphicsQ = engine->device->graphics;
   auto &presentQ = engine->device->present;
@@ -235,6 +237,8 @@ Result createLogicalDevice(RenderEngineT *const engine,
 }
 
 Result createOptimalGPU(RenderEngineT *const engine) {
+  engine->device = std::make_unique<DeviceT>();
+
   auto devs = queryEligibleDevices(engine->instance->handle.get());
   if (!devs.size())
     return Result::ErrorNoVulkanDevicesAvailable;

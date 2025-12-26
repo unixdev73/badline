@@ -50,8 +50,10 @@ Result createWindowSurface(RenderEngineT *const engine) {
   VkSurfaceKHR surf{};
   if (auto result = glfwCreateWindowSurface(
           engine->instance->handle.get(), win, 0, &surf);
-      result != VK_SUCCESS)
+      result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create vulkan surface", result);
     return Result::ErrorVulkanSurfaceCreationFailure;
+  }
 
   auto inst = engine->instance->handle.get();
   engine->window->surface = {surf, [inst](VkSurfaceKHR_T *const ptr) {
@@ -70,8 +72,10 @@ Result queryPresentModes(RenderEngineT *const engine) {
           engine->window->surface.get(),
           &count,
           nullptr);
-      result != VK_SUCCESS)
+      result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to query present modes", result);
     return Result::ErrorPresentModesQueryFailure;
+  }
 
   engine->window->presentModes.resize(count);
   if (auto result = vkGetPhysicalDeviceSurfacePresentModesKHR(
@@ -79,8 +83,10 @@ Result queryPresentModes(RenderEngineT *const engine) {
           engine->window->surface.get(),
           &count,
           engine->window->presentModes.data());
-      result != VK_SUCCESS)
+      result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to fill present modes", result);
     return Result::ErrorPresentModesFillFailure;
+  }
 
   return Result::Success;
 }
@@ -93,8 +99,11 @@ Result checkRequestedPresentModeAvailable(RenderEngineT *const engine) {
       break;
     }
   }
-  if (!found)
+  if (!found) {
+    std::string mode = std::to_string(engine->window->presentMode);
+    setErrMsg(engine, "The requested present mode: " + mode);
     return Result::ErrorRequestedPresentModeNotAvailable;
+  }
 
   return Result::Success;
 }
@@ -105,8 +114,10 @@ Result checkSurfaceEligibility(RenderEngineT *const engine) {
           engine->device->identifier,
           engine->window->surface.get(),
           &engine->window->surfaceCaps);
-      result != VK_SUCCESS)
+      result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to query surface capabilities", result);
     return Result::ErrorSurfaceCapabilitiesQueryFailure;
+  }
 
   if (engine->window->width > engine->window->surfaceCaps.maxImageExtent.width)
     return Result::ErrorRequestedSurfaceWidthTooLarge;
@@ -121,8 +132,10 @@ Result checkSurfaceEligibility(RenderEngineT *const engine) {
 
   if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
           engine->device->identifier, engine->window->surface.get(), &count, 0);
-      result != VK_SUCCESS)
+      result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to query surface formats", result);
     return Result::ErrorSurfaceFormatQueryFailure;
+  }
 
   engine->window->surfaceFormats.resize(count);
   if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
@@ -130,8 +143,10 @@ Result checkSurfaceEligibility(RenderEngineT *const engine) {
           engine->window->surface.get(),
           &count,
           engine->window->surfaceFormats.data());
-      result != VK_SUCCESS)
+      result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to fill surface formats", result);
     return Result::ErrorSurfaceFormatQueryFailure;
+  }
 
   if ((1 == engine->window->surfaceFormats.size()) &&
       (VK_FORMAT_UNDEFINED == engine->window->surfaceFormats[0].format)) {
@@ -174,8 +189,10 @@ Result createWindowSwapchain(RenderEngineT *const engine) {
   VkSwapchainKHR swapchain{};
   if (auto result = vkCreateSwapchainKHR(
           engine->device->handle.get(), &swpInfo, 0, &swapchain);
-      result != VK_SUCCESS)
+      result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create window swapchain", result);
     return Result::ErrorVulkanSwapchainCreationFailure;
+  }
 
   auto dev = engine->device->handle.get();
   engine->window->swapchain = {swapchain, [dev](VkSwapchainKHR_T *const ptr) {
@@ -192,8 +209,10 @@ Result fetchSwapchainImages(RenderEngineT *const engine) {
                                             engine->window->swapchain.get(),
                                             &count,
                                             0);
-      result != VK_SUCCESS)
+      result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to query swapchain image count", result);
     return Result::ErrorSwapchainImageQueryFailure;
+  }
 
   engine->window->swapImages.resize(count);
 
@@ -201,8 +220,10 @@ Result fetchSwapchainImages(RenderEngineT *const engine) {
                                             engine->window->swapchain.get(),
                                             &count,
                                             engine->window->swapImages.data());
-      result != VK_SUCCESS)
+      result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to fetch swapchain images", result);
     return Result::ErrorSwapchainImageFillFailure;
+  }
 
   return Result::Success;
 }
@@ -211,6 +232,7 @@ Result createWindow(RenderEngineT *const engine,
                     uint32_t const width,
                     uint32_t const height) {
 
+  engine->window = std::make_unique<WindowT>();
   if (auto r = createGLFWindow(engine, width, height); r != Result::Success)
     return r;
 
