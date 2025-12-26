@@ -20,6 +20,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
+#include "vulkan/vulkan_core.h"
 #include <memory>
 
 namespace re {
@@ -52,6 +53,7 @@ enum class Result : int {
   ErrorVulkanCommandPoolCreationFailure,
   ErrorVulkanResultMappingFailure,
   ErrorVulkanCommandBufferAllocationFailure,
+  ErrorVulkanMemoryAllocatorCreationFailure,
   ErrorNoErrorMessage
 };
 
@@ -59,6 +61,8 @@ Result toString(Result const result, std::string *const output);
 } // namespace re
 
 namespace re {
+static constexpr auto BADLINE_VK_API_VERSION = VK_API_VERSION_1_3;
+
 struct RenderEngineT;
 
 using UniqueRenderEngine =

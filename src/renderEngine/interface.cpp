@@ -162,6 +162,9 @@ Result toString(Result const result, std::string *const output) {
   case Result::ErrorVulkanCommandBufferAllocationFailure:
     *output = "ErrorVulkanCommandBufferAllocationFailure";
     break;
+  case Result::ErrorVulkanMemoryAllocatorCreationFailure:
+    *output = "ErrorVulkanMemoryAllocatorCreationFailure";
+    break;
   case Result::ErrorNoErrorMessage:
     *output = "ErrorNoErrorMessage";
     break;

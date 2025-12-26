@@ -20,10 +20,10 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include "vulkan/vulkan_core.h"
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#include "allocator.hpp"
 #include <functional>
 #include <vector>
 
@@ -49,6 +49,9 @@ using UniqueDevice = std::unique_ptr<VkDevice_T, Deleter<VkDevice_T>>;
 using UniqueCmdPool =
     std::unique_ptr<VkCommandPool_T, Deleter<VkCommandPool_T>>;
 
+struct AllocatorT;
+using UniqueAllocator = std::unique_ptr<AllocatorT>;
+
 struct DeviceT {
   VkPhysicalDevice identifier{VK_NULL_HANDLE};
   UniqueDevice handle{nullptr, nullptr};
@@ -62,6 +65,8 @@ struct DeviceT {
   uint32_t graphicsFamIndex{};
   UniqueCmdPool graphicsCmdPool{nullptr, nullptr};
   VkCommandBuffer graphicsBuff{VK_NULL_HANDLE};
+
+  UniqueAllocator allocator{};
 };
 
 Result createOptimalGPU(RenderEngineT *const engine);

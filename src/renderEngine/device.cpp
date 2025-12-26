@@ -194,12 +194,32 @@ Result allocateCommandBuffers(RenderEngineT *const engine) {
   return Result::Success;
 }
 
+Result createMemoryAllocator(RenderEngineT *const engine) {
+  auto const inst = engine->instance->handle.get();
+  auto const dev = engine->device->handle.get();
+  auto const phy = engine->device->identifier;
+
+  auto &alloc = engine->device->allocator;
+  VkResult res{};
+  alloc = createAllocator(inst, phy, dev, &res);
+  if (!alloc) {
+    setErrMsg(engine, "Failed to create VMA", res);
+    return Result::ErrorVulkanMemoryAllocatorCreationFailure;
+  }
+
+  return Result::Success;
+}
+
 Result createDeviceResources(RenderEngineT *const engine) {
   if (auto r = createCommandPools(engine); r != Result::Success)
     return r;
 
   if (auto r = allocateCommandBuffers(engine); r != Result::Success)
     return r;
+
+  if (auto r = createMemoryAllocator(engine); r != Result::Success)
+    return r;
+
   return Result::Success;
 }
 

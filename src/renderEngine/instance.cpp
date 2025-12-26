@@ -32,7 +32,7 @@ Result createVulkanInstance(RenderEngineT *const engine,
   VkApplicationInfo app{};
   app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   app.pApplicationName = appName.c_str();
-  app.apiVersion = VK_API_VERSION_1_3;
+  app.apiVersion = BADLINE_VK_API_VERSION;
   info.pApplicationInfo = &app;
 
   info.ppEnabledExtensionNames =
