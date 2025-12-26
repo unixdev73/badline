@@ -43,6 +43,16 @@ Result createRenderEngine(RenderEngineT **const handle,
   if (auto r = createOptimalGPU(*handle); r != Result::Success)
     return r;
 
+  VkFenceCreateInfo finf{};
+  finf.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  VkFence f{};
+  auto dev = (*handle)->device->handle.get();
+  auto r = vkCreateFence((*handle)->device->handle.get(), &finf, 0, &f);
+  if (r != VK_SUCCESS) {
+    return Result::ErrorVulkanFenceCreationFailure;
+  }
+  (*handle)->fence = {f,
+                      [dev](VkFence_T *const p) { vkDestroyFence(dev, p, 0); }};
   return Result::Success;
 }
 
@@ -68,8 +78,11 @@ Result run(RenderEngineT *const handle) {
 
     if (glfwGetKey(handle->window->handle.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
       glfwSetWindowShouldClose(handle->window->handle.get(), GLFW_TRUE);
+
+    render(handle);
   }
 
+  vkDeviceWaitIdle(handle->device->handle.get());
   return Result::Success;
 }
 
@@ -164,6 +177,18 @@ Result toString(Result const result, std::string *const output) {
     break;
   case Result::ErrorVulkanMemoryAllocatorCreationFailure:
     *output = "ErrorVulkanMemoryAllocatorCreationFailure";
+    break;
+  case Result::ErrorVulkanSemaphoreCreationFailure:
+    *output = "ErrorVulkanSemaphoreCreationFailure";
+    break;
+  case Result::ErrorVulkanImageViewCreationFailure:
+    *output = "ErrorVulkanImageViewCreationFailure";
+    break;
+  case Result::ErrorSwapchainImageAcquisitionFailure:
+    *output = "ErrorSwapchainImageAcquisitionFailure";
+    break;
+  case Result::ErrorVulkanFenceCreationFailure:
+    *output = "ErrorVulkanFenceCreationFailure";
     break;
   case Result::ErrorNoErrorMessage:
     *output = "ErrorNoErrorMessage";

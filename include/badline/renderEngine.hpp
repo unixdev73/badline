@@ -54,6 +54,10 @@ enum class Result : int {
   ErrorVulkanResultMappingFailure,
   ErrorVulkanCommandBufferAllocationFailure,
   ErrorVulkanMemoryAllocatorCreationFailure,
+  ErrorVulkanSemaphoreCreationFailure,
+  ErrorVulkanImageViewCreationFailure,
+  ErrorSwapchainImageAcquisitionFailure,
+  ErrorVulkanFenceCreationFailure,
   ErrorNoErrorMessage
 };
 

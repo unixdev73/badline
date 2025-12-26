@@ -224,9 +224,23 @@ Result createDeviceResources(RenderEngineT *const engine) {
 }
 
 Result createLogicalDevice(RenderEngineT *const engine,
-                           VkDeviceCreateInfo const *const info,
+                           VkDeviceCreateInfo *const info,
                            VkPhysicalDevice const phy,
                            DeviceInfoT const *const devInfo) {
+
+  VkPhysicalDeviceSynchronization2FeaturesKHR sync2Feature{};
+  sync2Feature.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
+  sync2Feature.synchronization2 = VK_TRUE;
+
+  VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
+  dynamicRenderingFeature.sType =
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+  dynamicRenderingFeature.pNext = &sync2Feature;
+  dynamicRenderingFeature.dynamicRendering = VK_TRUE;
+
+  info->pNext = &dynamicRenderingFeature;
+
   VkDevice dev{};
   if (auto result = vkCreateDevice(phy, info, 0, &dev); result != VK_SUCCESS) {
     setErrMsg(engine, "Failed to create device", result);

@@ -228,6 +228,72 @@ Result fetchSwapchainImages(RenderEngineT *const engine) {
   return Result::Success;
 }
 
+Result createWindowSemaphores(RenderEngineT *const engine) {
+  auto const dev = engine->device->handle.get();
+  VkSemaphoreCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+  VkSemaphore sem{};
+  engine->window->renderSem.resize(engine->window->swapImages.size());
+
+  for (std::size_t i = 0; i < engine->window->swapImages.size(); ++i) {
+    auto result = vkCreateSemaphore(dev, &info, 0, &sem);
+    if (result != VK_SUCCESS) {
+      setErrMsg(engine, "Failed to create render semaphore", result);
+      return Result::ErrorVulkanSemaphoreCreationFailure;
+    }
+    engine->window->renderSem[i] = {
+        sem, [dev](VkSemaphore_T *const p) { vkDestroySemaphore(dev, p, 0); }};
+  }
+
+  auto result = vkCreateSemaphore(dev, &info, 0, &sem);
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create present semaphore", result);
+    return Result::ErrorVulkanSemaphoreCreationFailure;
+  }
+  engine->window->presentSem = {
+      sem, [dev](VkSemaphore_T *const p) { vkDestroySemaphore(dev, p, 0); }};
+
+  return Result::Success;
+}
+
+Result createSwapchainImageViews(RenderEngineT *const engine) {
+  auto const size = engine->window->swapImages.size();
+  auto const dev = engine->device->handle.get();
+  auto &views = engine->window->swapImgViews;
+  views.resize(size);
+
+  for (std::size_t i = 0; i < size; ++i) {
+    VkImageViewCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    info.viewType = VkImageViewType::VK_IMAGE_VIEW_TYPE_2D;
+    info.image = engine->window->swapImages[i];
+    info.components = VkComponentMapping{.r = VK_COMPONENT_SWIZZLE_R,
+                                         .g = VK_COMPONENT_SWIZZLE_G,
+                                         .b = VK_COMPONENT_SWIZZLE_B,
+                                         .a = VK_COMPONENT_SWIZZLE_A};
+
+    info.format = engine->window->surfaceFormat.format;
+    info.subresourceRange = VkImageSubresourceRange{
+        .aspectMask = VkImageAspectFlagBits::VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1};
+
+    VkImageView view{};
+    auto result = vkCreateImageView(dev, &info, 0, &view);
+    if (result != VK_SUCCESS) {
+      setErrMsg(engine, "Failed to create image view", result);
+      return Result::ErrorVulkanImageViewCreationFailure;
+    }
+
+    views[i] = {
+        view, [dev](VkImageView_T *const p) { vkDestroyImageView(dev, p, 0); }};
+  }
+  return Result::Success;
+}
+
 Result createWindow(RenderEngineT *const engine,
                     uint32_t const width,
                     uint32_t const height) {
@@ -252,6 +318,12 @@ Result createWindow(RenderEngineT *const engine,
     return r;
 
   if (auto r = fetchSwapchainImages(engine); r != Result::Success)
+    return r;
+
+  if (auto r = createSwapchainImageViews(engine); r != Result::Success)
+    return r;
+
+  if (auto r = createWindowSemaphores(engine); r != Result::Success)
     return r;
 
   return Result::Success;

@@ -36,6 +36,12 @@ using UniqueSwapchain =
     std::unique_ptr<VkSwapchainKHR_T,
                     std::function<void(VkSwapchainKHR_T *const)>>;
 
+using UniqueSemaphore =
+    std::unique_ptr<VkSemaphore_T, std::function<void(VkSemaphore_T *const)>>;
+
+using UniqueImageView =
+    std::unique_ptr<VkImageView_T, std::function<void(VkImageView_T *const)>>;
+
 struct WindowT {
   UniqueWindow handle{nullptr, nullptr};
   uint32_t width{}, height{};
@@ -50,6 +56,10 @@ struct WindowT {
 
   UniqueSwapchain swapchain{nullptr, nullptr};
   std::vector<VkImage> swapImages{};
+  std::vector<UniqueImageView> swapImgViews{};
+
+  std::vector<UniqueSemaphore> renderSem{};
+  UniqueSemaphore presentSem{nullptr, nullptr};
 };
 
 Result
