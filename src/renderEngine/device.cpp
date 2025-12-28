@@ -112,7 +112,7 @@ Result setupCreateInfo(VkDeviceCreateInfo *const devCreateInfo,
       (devInfo->graphicsQueue.famIndex == devInfo->presentQueue.famIndex) ? 1
                                                                           : 2;
 
-  static char const *exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  static char const *exts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
   devCreateInfo->enabledExtensionCount = sizeof(exts) / sizeof(exts[0]);
   devCreateInfo->ppEnabledExtensionNames = exts;
 
@@ -210,9 +210,9 @@ Result createLogicalDevice(RenderEngineT *const engine,
                            VkPhysicalDevice const phy,
                            DeviceInfoT const *const devInfo) {
 
-  VkPhysicalDeviceSynchronization2FeaturesKHR sync2Feature{};
+  VkPhysicalDeviceSynchronization2Features sync2Feature{};
   sync2Feature.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
   sync2Feature.synchronization2 = VK_TRUE;
 
   VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
