@@ -153,16 +153,6 @@ Result createCommandPools(RenderEngineT *const engine) {
                                        vkDestroyCommandPool(dev, p, 0);
                                      }};
 
-  info.queueFamilyIndex = engine->device->presentFamIndex;
-  result = vkCreateCommandPool(dev, &info, 0, &pool);
-  if (result != VK_SUCCESS) {
-    setErrMsg(engine, "Failed to create command pool", result);
-    return Result::ErrorVulkanCommandPoolCreationFailure;
-  }
-  engine->device->presentCmdPool = {pool, [dev](VkCommandPool_T *const p) {
-                                      vkDestroyCommandPool(dev, p, 0);
-                                    }};
-
   return Result::Success;
 }
 
@@ -182,14 +172,6 @@ Result allocateCommandBuffers(RenderEngineT *const engine) {
     return Result::ErrorVulkanCommandBufferAllocationFailure;
   }
   engine->device->graphicsBuff = buff;
-
-  info.commandPool = engine->device->presentCmdPool.get();
-  result = vkAllocateCommandBuffers(dev, &info, &buff);
-  if (result != VK_SUCCESS) {
-    setErrMsg(engine, "Failed to allocate cmd buffer", result);
-    return Result::ErrorVulkanCommandBufferAllocationFailure;
-  }
-  engine->device->presentBuff = buff;
 
   return Result::Success;
 }

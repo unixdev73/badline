@@ -58,14 +58,11 @@ struct DeviceT {
 
   VkQueue present{VK_NULL_HANDLE};
   uint32_t presentFamIndex{};
-  UniqueCmdPool presentCmdPool{nullptr, nullptr};
-  VkCommandBuffer presentBuff{VK_NULL_HANDLE};
-
   VkQueue graphics{VK_NULL_HANDLE};
   uint32_t graphicsFamIndex{};
+
   UniqueCmdPool graphicsCmdPool{nullptr, nullptr};
   VkCommandBuffer graphicsBuff{VK_NULL_HANDLE};
-
   UniqueAllocator allocator{};
 };
 
