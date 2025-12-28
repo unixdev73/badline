@@ -62,7 +62,6 @@ struct DeviceT {
   uint32_t graphicsFamIndex{};
 
   UniqueCmdPool graphicsCmdPool{nullptr, nullptr};
-  VkCommandBuffer graphicsBuff{VK_NULL_HANDLE};
   UniqueAllocator allocator{};
 };
 

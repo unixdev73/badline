@@ -20,56 +20,118 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "engine.hpp"
 #include "device.hpp"
+#include "vulkan/vulkan_core.h"
 #include "window.hpp"
 #include "vkresult.hpp"
 
 namespace re {
-Result render(RenderEngineT *const engine) {
-  auto dev = engine->device->handle.get();
-  auto swp = engine->window->swapchain.get();
-  auto presentDone = engine->window->presentSem.get();
-  auto fence = engine->fence.get();
+Result present(RenderEngineT *const engine, uint32_t const imageIndex) {
+  auto const renderDone = engine->window->renderSem[imageIndex].get();
+  auto const swp = engine->window->swapchain.get();
 
-  static std::vector<bool> undef(engine->window->swapImages.size(), true);
+  VkPresentInfoKHR presentInfo{};
+  presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  presentInfo.waitSemaphoreCount = 1;
+  presentInfo.pWaitSemaphores = &renderDone;
+  presentInfo.swapchainCount = 1;
+  presentInfo.pSwapchains = &swp;
+  presentInfo.pImageIndices = &imageIndex;
+  vkQueuePresentKHR(engine->device->present, &presentInfo);
+
+  return Result::Success;
+}
+
+Result submitDrawCalls(RenderEngineT *const engine, uint32_t const imageIndex) {
+  auto const renderDone = engine->window->renderSem[imageIndex].get();
+  auto const acquireDone = engine->window->acquireSem.get();
+  auto const fence = engine->window->fence.get();
+
+  VkSubmitInfo2 submitInfo{};
+  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+
+  submitInfo.commandBufferInfoCount = 1;
+  VkCommandBufferSubmitInfo cbsi{};
+  cbsi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+  cbsi.commandBuffer = engine->window->graphicsBuf;
+  submitInfo.pCommandBufferInfos = &cbsi;
+
+  submitInfo.waitSemaphoreInfoCount = 1;
+  VkSemaphoreSubmitInfo wsi{};
+  wsi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+  wsi.semaphore = acquireDone;
+  wsi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  submitInfo.pWaitSemaphoreInfos = &wsi;
+
+  submitInfo.signalSemaphoreInfoCount = 1;
+  VkSemaphoreSubmitInfo ssi{};
+  ssi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+  ssi.semaphore = renderDone;
+  ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  submitInfo.pSignalSemaphoreInfos = &ssi;
+  vkQueueSubmit2(engine->device->graphics, 1, &submitInfo, fence);
+
+  return Result::Success;
+}
+
+Result setRenderBarriers(RenderEngineT *const engine, VkImage const image) {
+  VkCommandBuffer const cmd = engine->window->graphicsBuf;
+  VkImageMemoryBarrier2 barrier{}, barrier2{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  barrier.image = image;
+  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  barrier2 = barrier;
+  VkDependencyInfo depInfo{};
+  depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+  depInfo.imageMemoryBarrierCount = 1;
+  VkImageMemoryBarrier2 barriers[] = {barrier, barrier2};
+  depInfo.pImageMemoryBarriers = barriers;
+
+  barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+  barrier.srcAccessMask = VK_ACCESS_2_NONE;
+  barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+
+  barrier2.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  barrier2.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier2.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+  barrier2.dstAccessMask = VK_ACCESS_2_NONE;
+  barrier2.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+  barrier2.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  vkCmdPipelineBarrier2(cmd, &depInfo);
+  return Result::Success;
+}
+
+Result getNextImage(RenderEngineT *const engine, uint32_t *const imgIndex) {
+  auto const acquireDone = engine->window->acquireSem.get();
+  auto const swp = engine->window->swapchain.get();
+  auto const dev = engine->device->handle.get();
 
   uint32_t img{};
-  auto r = vkAcquireNextImageKHR(
-      dev, swp, UINT64_MAX, presentDone, VK_NULL_HANDLE, &img);
-  if (r == VK_NOT_READY)
-    return Result::Success;
+  auto r = vkAcquireNextImageKHR(dev, swp, UINT64_MAX, acquireDone, 0, &img);
   if (r != VK_SUCCESS) {
     setErrMsg(engine, "Fetching swapchain image failed", r);
     return Result::ErrorSwapchainImageAcquisitionFailure;
   }
 
-  auto renderDone = engine->window->renderSem[img].get();
+  *imgIndex = img;
+  return Result::Success;
+}
 
-  VkCommandBuffer cmd = engine->device->graphicsBuff;
+Result render(RenderEngineT *const engine) {
+  VkCommandBuffer const cmd = engine->window->graphicsBuf;
+  auto const dev = engine->device->handle.get();
+
+  uint32_t img{};
+  if (auto r = getNextImage(engine, &img); r != Result::Success)
+    return r;
+
   VkCommandBufferBeginInfo cbi{};
   cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   vkBeginCommandBuffer(cmd, &cbi);
 
-  // Transition: PRESENT -> COLOR_ATTACHMENT
-  VkImageMemoryBarrier2 barrier{};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-  barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-  barrier.srcAccessMask = 0;
-  barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-  barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-  if (undef[img]) {
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    undef[img] = false;
-  } else
-    barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-  barrier.image = engine->window->swapImages[img];
-  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-
-  VkDependencyInfo depInfo{};
-  depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-  depInfo.imageMemoryBarrierCount = 1;
-  depInfo.pImageMemoryBarriers = &barrier;
-  vkCmdPipelineBarrier2(cmd, &depInfo);
+  setRenderBarriers(engine, engine->window->swapImages[img]);
 
   // Dynamic rendering
   VkRenderingAttachmentInfo colorAttachment{};
@@ -91,43 +153,16 @@ Result render(RenderEngineT *const engine) {
   vkCmdBeginRendering(cmd, &renderingInfo);
   vkCmdEndRendering(cmd);
 
-  // Transition: COLOR_ATTACHMENT -> PRESENT
-  barrier.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-  barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-  barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-  barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
-  barrier.dstAccessMask = 0;
-  vkCmdPipelineBarrier2(cmd, &depInfo);
   vkEndCommandBuffer(cmd);
 
-  // Submit
-  VkSubmitInfo submitInfo{};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &cmd;
-  submitInfo.waitSemaphoreCount = 1;
-  submitInfo.pWaitSemaphores = &presentDone;
-  VkPipelineStageFlags waitStages[] = {
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-  submitInfo.pWaitDstStageMask = waitStages;
-  submitInfo.signalSemaphoreCount = 1;
-  submitInfo.pSignalSemaphores = &renderDone;
-  vkQueueSubmit(engine->device->graphics, 1, &submitInfo, fence);
-
-  // Present
-  VkPresentInfoKHR presentInfo{};
-  presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  presentInfo.waitSemaphoreCount = 1;
-  presentInfo.pWaitSemaphores = &renderDone;
-  presentInfo.swapchainCount = 1;
-  presentInfo.pSwapchains = &swp;
-  presentInfo.pImageIndices = &img;
-  vkQueuePresentKHR(engine->device->present, &presentInfo);
+  auto const fence = engine->window->fence.get();
+  if (auto r = submitDrawCalls(engine, img); r != Result::Success)
+    return r;
 
   vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
   vkResetFences(dev, 1, &fence);
-  return Result::Success;
+
+  return present(engine, img);
 }
 
 void setErrMsg(RenderEngineT *const e, std::string const &msg, VkResult r) {

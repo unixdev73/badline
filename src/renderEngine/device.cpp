@@ -156,26 +156,6 @@ Result createCommandPools(RenderEngineT *const engine) {
   return Result::Success;
 }
 
-Result allocateCommandBuffers(RenderEngineT *const engine) {
-  VkCommandBufferAllocateInfo info{};
-  info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  info.commandBufferCount = 1;
-  info.commandPool = engine->device->graphicsCmdPool.get();
-  info.level = VkCommandBufferLevel::VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
-  auto const dev = engine->device->handle.get();
-  VkCommandBuffer buff{};
-
-  auto result = vkAllocateCommandBuffers(dev, &info, &buff);
-  if (result != VK_SUCCESS) {
-    setErrMsg(engine, "Failed to allocate cmd buffer", result);
-    return Result::ErrorVulkanCommandBufferAllocationFailure;
-  }
-  engine->device->graphicsBuff = buff;
-
-  return Result::Success;
-}
-
 Result createMemoryAllocator(RenderEngineT *const engine) {
   auto const inst = engine->instance->handle.get();
   auto const dev = engine->device->handle.get();
@@ -194,9 +174,6 @@ Result createMemoryAllocator(RenderEngineT *const engine) {
 
 Result createDeviceResources(RenderEngineT *const engine) {
   if (auto r = createCommandPools(engine); r != Result::Success)
-    return r;
-
-  if (auto r = allocateCommandBuffers(engine); r != Result::Success)
     return r;
 
   if (auto r = createMemoryAllocator(engine); r != Result::Success)

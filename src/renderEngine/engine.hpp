@@ -22,7 +22,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
-#include <functional>
 #include <string>
 #include <memory>
 
@@ -36,7 +35,6 @@ struct RenderEngineT {
   std::unique_ptr<DeviceT> device{};
   std::unique_ptr<WindowT> window{};
 
-  std::unique_ptr<VkFence_T, std::function<void(VkFence_T *const)>> fence{};
   std::string errorMessage{};
 };
 

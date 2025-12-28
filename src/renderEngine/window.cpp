@@ -228,31 +228,72 @@ Result fetchSwapchainImages(RenderEngineT *const engine) {
   return Result::Success;
 }
 
+Result transitionSwapchainImages(RenderEngineT *const engine) {
+  VkCommandBuffer const cmd = engine->window->graphicsBuf;
+  VkCommandBufferBeginInfo cbi{};
+  cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  vkBeginCommandBuffer(cmd, &cbi);
+
+  VkImageMemoryBarrier2 barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+  barrier.srcAccessMask = VK_ACCESS_2_NONE;
+  barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+  barrier.dstAccessMask = VK_ACCESS_2_NONE;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  VkDependencyInfo depInfo{};
+  depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+  depInfo.imageMemoryBarrierCount = 1;
+  depInfo.pImageMemoryBarriers = &barrier;
+
+  for (std::size_t i = 0; i < engine->window->swapImages.size(); ++i) {
+    barrier.image = engine->window->swapImages[i];
+    vkCmdPipelineBarrier2(cmd, &depInfo);
+  }
+
+  vkEndCommandBuffer(cmd);
+
+  auto const fence = engine->window->fence.get();
+  VkSubmitInfo2 submitInfo{};
+  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+
+  submitInfo.commandBufferInfoCount = 1;
+  VkCommandBufferSubmitInfo cbsi{};
+  cbsi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+  cbsi.commandBuffer = engine->window->graphicsBuf;
+  submitInfo.pCommandBufferInfos = &cbsi;
+
+  vkQueueSubmit2(engine->device->graphics, 1, &submitInfo, fence);
+
+  auto const dev = engine->device->handle.get();
+  vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+  vkResetFences(dev, 1, &fence);
+  return Result::Success;
+}
+
 Result createWindowSemaphores(RenderEngineT *const engine) {
   auto const dev = engine->device->handle.get();
   VkSemaphoreCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-  VkSemaphore sem{};
   engine->window->renderSem.resize(engine->window->swapImages.size());
+  std::vector<UniqueSemaphore *> sem = {&engine->window->acquireSem};
+  for (auto &s : engine->window->renderSem)
+    sem.push_back(&s);
 
-  for (std::size_t i = 0; i < engine->window->swapImages.size(); ++i) {
-    auto result = vkCreateSemaphore(dev, &info, 0, &sem);
+  for (std::size_t i = 0; i < sem.size(); ++i) {
+    VkSemaphore semaphore{};
+    auto result = vkCreateSemaphore(dev, &info, 0, &semaphore);
     if (result != VK_SUCCESS) {
       setErrMsg(engine, "Failed to create render semaphore", result);
       return Result::ErrorVulkanSemaphoreCreationFailure;
     }
-    engine->window->renderSem[i] = {
-        sem, [dev](VkSemaphore_T *const p) { vkDestroySemaphore(dev, p, 0); }};
+    *sem[i] = {semaphore, [dev](VkSemaphore_T *const p) {
+                 vkDestroySemaphore(dev, p, 0);
+               }};
   }
-
-  auto result = vkCreateSemaphore(dev, &info, 0, &sem);
-  if (result != VK_SUCCESS) {
-    setErrMsg(engine, "Failed to create present semaphore", result);
-    return Result::ErrorVulkanSemaphoreCreationFailure;
-  }
-  engine->window->presentSem = {
-      sem, [dev](VkSemaphore_T *const p) { vkDestroySemaphore(dev, p, 0); }};
 
   return Result::Success;
 }
@@ -294,6 +335,41 @@ Result createSwapchainImageViews(RenderEngineT *const engine) {
   return Result::Success;
 }
 
+Result allocateCommandBuffers(RenderEngineT *const engine) {
+  auto const dev = engine->device->handle.get();
+
+  VkCommandBufferAllocateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  info.commandPool = engine->device->graphicsCmdPool.get();
+  info.level = VkCommandBufferLevel::VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+  auto &buf = engine->window->graphicsBuf;
+  info.commandBufferCount = 1;
+
+  auto result = vkAllocateCommandBuffers(dev, &info, &buf);
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to allocate cmd buffer", result);
+    return Result::ErrorVulkanCommandBufferAllocationFailure;
+  }
+
+  return Result::Success;
+}
+
+Result createWindowFence(RenderEngineT *const engine) {
+  VkFenceCreateInfo finf{};
+  finf.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  VkFence f{};
+  auto dev = engine->device->handle.get();
+  auto r = vkCreateFence(engine->device->handle.get(), &finf, 0, &f);
+  if (r != VK_SUCCESS) {
+    return Result::ErrorVulkanFenceCreationFailure;
+  }
+  auto &fence = engine->window->fence;
+  fence = {f, [dev](VkFence_T *const p) { vkDestroyFence(dev, p, 0); }};
+
+  return Result::Success;
+}
+
 Result createWindow(RenderEngineT *const engine,
                     uint32_t const width,
                     uint32_t const height) {
@@ -314,10 +390,19 @@ Result createWindow(RenderEngineT *const engine,
   if (auto r = checkSurfaceEligibility(engine); r != Result::Success)
     return r;
 
+  if (auto r = createWindowFence(engine); r != Result::Success)
+    return r;
+
   if (auto r = createWindowSwapchain(engine); r != Result::Success)
     return r;
 
   if (auto r = fetchSwapchainImages(engine); r != Result::Success)
+    return r;
+
+  if (auto r = allocateCommandBuffers(engine); r != Result::Success)
+    return r;
+
+  if (auto r = transitionSwapchainImages(engine); r != Result::Success)
     return r;
 
   if (auto r = createSwapchainImageViews(engine); r != Result::Success)

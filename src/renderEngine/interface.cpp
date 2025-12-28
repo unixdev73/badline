@@ -43,16 +43,6 @@ Result createRenderEngine(RenderEngineT **const handle,
   if (auto r = createOptimalGPU(*handle); r != Result::Success)
     return r;
 
-  VkFenceCreateInfo finf{};
-  finf.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  VkFence f{};
-  auto dev = (*handle)->device->handle.get();
-  auto r = vkCreateFence((*handle)->device->handle.get(), &finf, 0, &f);
-  if (r != VK_SUCCESS) {
-    return Result::ErrorVulkanFenceCreationFailure;
-  }
-  (*handle)->fence = {f,
-                      [dev](VkFence_T *const p) { vkDestroyFence(dev, p, 0); }};
   return Result::Success;
 }
 

@@ -27,7 +27,8 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <memory>
 
 namespace re {
-using UniqueWindow = std::unique_ptr<GLFWwindow, void (*)(GLFWwindow *const)>;
+using UniqueWindow =
+    std::unique_ptr<GLFWwindow, std::function<void(GLFWwindow *const)>>;
 
 using UniqueSurface =
     std::unique_ptr<VkSurfaceKHR_T, std::function<void(VkSurfaceKHR_T *const)>>;
@@ -42,11 +43,14 @@ using UniqueSemaphore =
 using UniqueImageView =
     std::unique_ptr<VkImageView_T, std::function<void(VkImageView_T *const)>>;
 
+using UniqueFence =
+    std::unique_ptr<VkFence_T, std::function<void(VkFence_T *const)>>;
+
 struct WindowT {
-  UniqueWindow handle{nullptr, nullptr};
+  UniqueWindow handle{};
   uint32_t width{}, height{};
 
-  UniqueSurface surface{nullptr, nullptr};
+  UniqueSurface surface{};
   std::vector<VkSurfaceFormatKHR> surfaceFormats{};
   VkSurfaceFormatKHR surfaceFormat{};
   VkSurfaceCapabilitiesKHR surfaceCaps{};
@@ -54,12 +58,15 @@ struct WindowT {
   VkPresentModeKHR presentMode{VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR};
   std::vector<VkPresentModeKHR> presentModes{};
 
-  UniqueSwapchain swapchain{nullptr, nullptr};
+  UniqueSwapchain swapchain{};
   std::vector<VkImage> swapImages{};
   std::vector<UniqueImageView> swapImgViews{};
 
+  UniqueSemaphore acquireSem{};
   std::vector<UniqueSemaphore> renderSem{};
-  UniqueSemaphore presentSem{nullptr, nullptr};
+  VkCommandBuffer graphicsBuf{VK_NULL_HANDLE};
+
+  UniqueFence fence{};
 };
 
 Result
