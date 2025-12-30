@@ -180,6 +180,18 @@ Result toString(Result const result, std::string *const output) {
   case Result::ErrorVulkanFenceCreationFailure:
     *output = "ErrorVulkanFenceCreationFailure";
     break;
+  case Result::ErrorVulkanShaderModuleCreationFailure:
+    *output = "ErrorVulkanShaderModuleCreationFailure";
+    break;
+  case Result::ErrorVulkanPipelineLayoutCreationFailure:
+    *output = "ErrorVulkanPipelineLayoutCreationFailure";
+    break;
+  case Result::ErrorVulkanPipelineCreationFailure:
+    *output = "ErrorVulkanPipelineCreationFailure";
+    break;
+  case Result::ErrorVertexBufferCreationFailure:
+    *output = "ErrorVertexBufferCreationFailure";
+    break;
   case Result::ErrorNoErrorMessage:
     *output = "ErrorNoErrorMessage";
     break;

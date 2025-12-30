@@ -20,6 +20,8 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/renderEngine.hpp>
 #include "allocator.hpp"
+#include "engine.hpp"
+#include "device.hpp"
 
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
@@ -49,4 +51,38 @@ std::unique_ptr<AllocatorT> createAllocator(VkInstance const inst,
 
   return alloc;
 }
+
+Result setVertices(RenderEngineT *const engine,
+                   std::vector<Vertex> const *const vertices) {
+  VkBufferCreateInfo bufCreateInfo{};
+  bufCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufCreateInfo.size = sizeof(Vertex) * vertices->size();
+  bufCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+  VmaAllocationCreateInfo allocCreateInfo{};
+  allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+  allocCreateInfo.flags =
+      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+  VkBuffer buf;
+  VmaAllocation alloc;
+  VmaAllocator allocator = engine->device->allocator.get()->handle;
+  auto r = vmaCreateBuffer(
+      allocator, &bufCreateInfo, &allocCreateInfo, &buf, &alloc, nullptr);
+  if (r != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create vertex buffer", r);
+    return Result::ErrorVertexBufferCreationFailure;
+  }
+
+  auto const dev = engine->device->handle.get();
+  engine->vertexBuf = {buf, [allocator, alloc](VkBuffer_T *const p) {
+                         vmaDestroyBuffer(allocator, p, alloc);
+                       }};
+  engine->vertexBufSize = bufCreateInfo.size;
+
+  vmaCopyMemoryToAllocation(
+      allocator, vertices->data(), alloc, 0, bufCreateInfo.size);
+  return Result::Success;
+}
+
 } // namespace re

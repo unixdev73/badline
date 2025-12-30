@@ -20,8 +20,9 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include "vulkan/vulkan_core.h"
+#include "vertex.hpp"
 #include <memory>
+#include <vector>
 
 namespace re {
 enum class Result : int {
@@ -58,6 +59,10 @@ enum class Result : int {
   ErrorVulkanImageViewCreationFailure,
   ErrorSwapchainImageAcquisitionFailure,
   ErrorVulkanFenceCreationFailure,
+  ErrorVulkanShaderModuleCreationFailure,
+  ErrorVulkanPipelineLayoutCreationFailure,
+  ErrorVulkanPipelineCreationFailure,
+  ErrorVertexBufferCreationFailure,
   ErrorNoErrorMessage
 };
 
@@ -83,6 +88,9 @@ UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug);
 Result createWindow(RenderEngineT *const handle,
                     uint32_t const width,
                     uint32_t const height);
+
+Result setVertices(RenderEngineT *const engine,
+                   std::vector<Vertex> const *const vertices);
 
 Result run(RenderEngineT *const handle);
 

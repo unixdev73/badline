@@ -140,7 +140,7 @@ Result render(RenderEngineT *const engine) {
   colorAttachment.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
   colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  colorAttachment.clearValue.color = {{1.f, 1.f, 0.f, 1.f}};
+  colorAttachment.clearValue.color = {{0.f, 0.f, 0.f, 1.f}};
 
   VkRenderingInfo renderingInfo{};
   renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -151,6 +151,26 @@ Result render(RenderEngineT *const engine) {
   renderingInfo.pColorAttachments = &colorAttachment;
 
   vkCmdBeginRendering(cmd, &renderingInfo);
+
+  VkViewport const vp{.x = 0,
+                      .y = 0,
+                      .width = float(engine->window->width),
+                      .height = float(engine->window->height),
+                      .minDepth = 0.f,
+                      .maxDepth = 1.f};
+  vkCmdSetViewportWithCount(cmd, 1, &vp);
+
+  VkRect2D const sc{.offset = {0, 0},
+                    .extent = {engine->window->width, engine->window->height}};
+  vkCmdSetScissorWithCount(cmd, 1, &sc);
+  auto const pipe =
+      engine->device->pipelines[engine->window->activePipeline].get();
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+  auto const vertexBuf = engine->vertexBuf.get();
+  VkDeviceSize const offsets[] = {0};
+  vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuf, offsets);
+  vkCmdDraw(cmd, engine->vertexBufSize / sizeof(Vertex), 1, 0, 0);
+
   vkCmdEndRendering(cmd);
 
   vkEndCommandBuffer(cmd);

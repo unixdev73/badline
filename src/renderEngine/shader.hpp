@@ -23,28 +23,17 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
 #include <functional>
-#include <string>
 #include <memory>
+#include <string>
 
 namespace re {
-struct InstanceT;
-struct DeviceT;
-struct WindowT;
+struct RenderEngineT;
 
-struct RenderEngineT {
-  std::unique_ptr<InstanceT> instance{};
-  std::unique_ptr<DeviceT> device{};
-  std::unique_ptr<WindowT> window{};
+using UniqueShader =
+    std::unique_ptr<VkShaderModule_T,
+                    std::function<void(VkShaderModule_T *const)>>;
 
-  std::string errorMessage{};
-
-  std::unique_ptr<VkBuffer_T, std::function<void(VkBuffer_T *const)>> vertexBuf;
-  std::size_t vertexBufSize{};
-};
-
-Result render(RenderEngineT *const engine);
-
-void setErrMsg(RenderEngineT *const engine,
-               std::string const &msg,
-               VkResult r = VkResult::VK_SUCCESS);
+Result createShaderModule(RenderEngineT *const engine,
+                          std::string const &spirvFile,
+                          UniqueShader *const out);
 } // namespace re

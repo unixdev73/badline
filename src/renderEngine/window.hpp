@@ -67,6 +67,9 @@ struct WindowT {
   VkCommandBuffer graphicsBuf{VK_NULL_HANDLE};
 
   UniqueFence fence{};
+
+  std::size_t activePipelineLayout{};
+  std::size_t activePipeline{};
 };
 
 Result

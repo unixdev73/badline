@@ -36,5 +36,6 @@ int initialize(App *const);
 int initializeArgParser(App *const);
 int extractWindowArgs(App *const);
 int openWindow(App *const);
+int createTriangle(App *const);
 int run(App *const);
 } // namespace demo

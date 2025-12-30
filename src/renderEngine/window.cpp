@@ -23,6 +23,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include "instance.hpp"
 #include "device.hpp"
 #include "window.hpp"
+#include "shader.hpp"
 
 namespace re {
 Result
@@ -362,11 +363,146 @@ Result createWindowFence(RenderEngineT *const engine) {
   auto dev = engine->device->handle.get();
   auto r = vkCreateFence(engine->device->handle.get(), &finf, 0, &f);
   if (r != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create fence", r);
     return Result::ErrorVulkanFenceCreationFailure;
   }
   auto &fence = engine->window->fence;
   fence = {f, [dev](VkFence_T *const p) { vkDestroyFence(dev, p, 0); }};
 
+  return Result::Success;
+}
+
+Result createPipelineLayout(RenderEngineT *const engine) {
+  VkPipelineLayoutCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  VkDescriptorSetLayout layouts[] = {{}};
+  info.pSetLayouts = layouts;
+  info.setLayoutCount = 0;
+
+  auto const dev = engine->device->handle.get();
+  VkPipelineLayout handle{};
+  auto result = vkCreatePipelineLayout(dev, &info, 0, &handle);
+
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create pipeline layout", result);
+    return Result::ErrorVulkanPipelineLayoutCreationFailure;
+  }
+
+  engine->window->activePipelineLayout = engine->device->pipelineLayouts.size();
+  engine->device->pipelineLayouts.push_back(
+      {handle, [dev](VkPipelineLayout_T *const p) {
+         vkDestroyPipelineLayout(dev, p, 0);
+       }});
+  return Result::Success;
+}
+
+Result createGraphicsPipeline(RenderEngineT *const engine) {
+  UniqueRes<VkShaderModule_T> vertex{}, fragment{};
+  auto result = createShaderModule(engine, "shaders/vertex.spv", &vertex);
+  if (result != Result::Success)
+    return result;
+
+  result = createShaderModule(engine, "shaders/fragment.spv", &fragment);
+  if (result != Result::Success)
+    return result;
+
+  VkPipelineShaderStageCreateInfo stages[] = {
+      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+       .pNext = 0,
+       .flags = 0,
+       .stage = VK_SHADER_STAGE_VERTEX_BIT,
+       .module = vertex.get(),
+       .pName = "main",
+       .pSpecializationInfo = 0},
+      {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+       .pNext = 0,
+       .flags = 0,
+       .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+       .module = fragment.get(),
+       .pName = "main",
+       .pSpecializationInfo = 0}};
+
+  VkPipelineVertexInputStateCreateInfo vertexInputState{};
+  vertexInputState.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  auto const attribDesc = Vertex::attributeDescription();
+  vertexInputState.pVertexAttributeDescriptions = attribDesc.data();
+  vertexInputState.vertexAttributeDescriptionCount = attribDesc.size();
+  auto const bindDesc = Vertex::bindingDescription();
+  vertexInputState.pVertexBindingDescriptions = &bindDesc;
+  vertexInputState.vertexBindingDescriptionCount = 1;
+
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{};
+  inputAssemblyState.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  inputAssemblyState.primitiveRestartEnable = VK_FALSE;
+  inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+
+  VkPipelineRasterizationStateCreateInfo rasterizationState{};
+  rasterizationState.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rasterizationState.depthClampEnable = VK_FALSE;
+  rasterizationState.rasterizerDiscardEnable = VK_FALSE;
+  rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+  rasterizationState.lineWidth = 1.0f;
+  rasterizationState.cullMode = VK_CULL_MODE_NONE;
+  rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
+  rasterizationState.depthBiasEnable = VK_FALSE;
+
+  VkPipelineMultisampleStateCreateInfo multisampleState{};
+  multisampleState.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilState{};
+  depthStencilState.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+
+  VkPipelineColorBlendStateCreateInfo colorBlendState{};
+  colorBlendState.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+
+  VkPipelineDynamicStateCreateInfo dynamicState{};
+  dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  VkDynamicState dynamicStates[] = {
+      VkDynamicState::VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
+      VkDynamicState::VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT};
+  dynamicState.dynamicStateCount =
+      sizeof(dynamicStates) / sizeof(dynamicStates[0]);
+  dynamicState.pDynamicStates = dynamicStates;
+
+  VkPipelineViewportStateCreateInfo viewportState{};
+  viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+
+  VkGraphicsPipelineCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  info.stageCount = sizeof(stages) / sizeof(stages[0]);
+  info.pStages = stages;
+  info.pVertexInputState = &vertexInputState;
+  info.pInputAssemblyState = &inputAssemblyState;
+  info.pViewportState = &viewportState;
+  info.pRasterizationState = &rasterizationState;
+  info.pMultisampleState = &multisampleState;
+  info.pDepthStencilState = &depthStencilState;
+  info.pColorBlendState = &colorBlendState;
+  info.pDynamicState = &dynamicState;
+  info.layout =
+      engine->device->pipelineLayouts[engine->window->activePipelineLayout]
+          .get();
+  info.basePipelineHandle = VK_NULL_HANDLE;
+  info.basePipelineIndex = 0;
+
+  auto const dev = engine->device->handle.get();
+  VkPipeline handle{VK_NULL_HANDLE};
+  auto r = vkCreateGraphicsPipelines(dev, 0, 1, &info, 0, &handle);
+  if (r != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create graphics pipeline", r);
+    return Result::ErrorVulkanPipelineCreationFailure;
+  }
+
+  engine->window->activePipeline = engine->device->pipelines.size();
+  engine->device->pipelines.push_back(UniqueRes<VkPipeline_T>{
+      handle, [dev](VkPipeline_T *const p) { vkDestroyPipeline(dev, p, 0); }});
   return Result::Success;
 }
 
@@ -409,6 +545,12 @@ Result createWindow(RenderEngineT *const engine,
     return r;
 
   if (auto r = createWindowSemaphores(engine); r != Result::Success)
+    return r;
+
+  if (auto r = createPipelineLayout(engine); r != Result::Success)
+    return r;
+
+  if (auto r = createGraphicsPipeline(engine); r != Result::Success)
     return r;
 
   return Result::Success;

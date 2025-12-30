@@ -19,6 +19,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "app.hpp"
+#include <filesystem>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -42,11 +43,31 @@ int main(int const argc, char const *const *const argv) {
 }
 
 namespace demo {
+int createTriangle(App *const a) {
+  std::vector<re::Vertex> vertices = {
+      {{-0.75f, 0.75f, 0.f, 1.f}, {1.f, 0.f, 0.f, 1.f}},
+      {{0.f, -0.75f, 0.f, 1.f}, {0.f, 1.f, 0.f, 1.f}},
+      {{0.75f, 0.75f, 0.f, 1.f}, {0.f, 0.f, 1.f, 1.f}},
+  };
+
+  if (auto r = re::setVertices(a->engine.get(), &vertices);
+      r != re::Result::Success)
+    return 1;
+
+  return 0;
+}
+
 int run(App *const a) {
+  if (createTriangle(a))
+    return 1;
+
   return !(re::run(a->engine.get()) == re::Result::Success);
 }
 
 int initialize(App *const a) {
+  namespace fs = std::filesystem;
+  fs::current_path(fs::canonical(fs::path{a->argv[0]}.parent_path()));
+
   if (a->argc > 1 && initializeArgParser(a))
     return 1;
 
