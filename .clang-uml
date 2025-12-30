@@ -1,21 +1,24 @@
-# Path to the directory where `compile_commands.json` can be found
 compilation_database_dir: build
 
-# Output directory for the diagrams
 output_directory: build/diagrams
 
-# Diagrams definitions
 diagrams:
-  # Diagram name
-  badline_classes:
-    # Type of diagram (has to be `class`)
+  argParser:
     type: class
 
-    # Include only translation units matching the following patterns
     glob:
-      - src/**/*.cpp
+      - src/argParser/*.cpp
 
     include:
       namespaces:
         - ap
+
+  renderEngine:
+    type: class
+
+    glob:
+      - src/renderEngine/*.cpp
+
+    include:
+      namespaces:
         - re
