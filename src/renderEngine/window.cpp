@@ -457,6 +457,11 @@ Result createGraphicsPipeline(RenderEngineT *const engine) {
   VkPipelineDepthStencilStateCreateInfo depthStencilState{};
   depthStencilState.sType =
       VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencilState.depthTestEnable = VK_TRUE;
+  depthStencilState.depthWriteEnable = VK_TRUE;
+  depthStencilState.minDepthBounds = 0.f;
+  depthStencilState.maxDepthBounds = 1.f;
+  depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
 
   VkPipelineColorBlendStateCreateInfo colorBlendState{};
   colorBlendState.sType =
@@ -474,8 +479,13 @@ Result createGraphicsPipeline(RenderEngineT *const engine) {
   VkPipelineViewportStateCreateInfo viewportState{};
   viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 
+  VkPipelineRenderingCreateInfo nextInfo{};
+  nextInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+  nextInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
+
   VkGraphicsPipelineCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  info.pNext = &nextInfo;
   info.stageCount = sizeof(stages) / sizeof(stages[0]);
   info.pStages = stages;
   info.pVertexInputState = &vertexInputState;
@@ -506,6 +516,48 @@ Result createGraphicsPipeline(RenderEngineT *const engine) {
   return Result::Success;
 }
 
+Result createDepthImage(
+    RenderEngineT *const engine,
+    std::unique_ptr<VkImage_T, std::function<void(VkImage_T *const)>> *const
+        out);
+
+Result createDepthAttachment(RenderEngineT *const engine) {
+  std::unique_ptr<VkImage_T, std::function<void(VkImage_T *const)>> img{};
+  if (auto r = createDepthImage(engine, &img); r != Result::Success)
+    return r;
+
+  VkImageViewCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  info.image = img.get();
+  info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  info.components = VkComponentMapping{.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                       .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                       .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                       .a = VK_COMPONENT_SWIZZLE_IDENTITY};
+  info.subresourceRange = {
+      .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+      .baseMipLevel = 0,
+      .levelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+  };
+
+  info.format = VK_FORMAT_D32_SFLOAT;
+
+  auto const dev = engine->device->handle.get();
+  VkImageView handle{};
+  if (auto r = vkCreateImageView(dev, &info, 0, &handle); r != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create depth image view", r);
+    return Result::ErrorDepthImageCreationFailure;
+  }
+
+  engine->window->depthImg = std::move(img);
+  engine->window->depthImgView = {
+      handle, [dev](VkImageView_T *const p) { vkDestroyImageView(dev, p, 0); }};
+
+  return Result::Success;
+}
+
 Result createWindow(RenderEngineT *const engine,
                     uint32_t const width,
                     uint32_t const height) {
@@ -533,6 +585,9 @@ Result createWindow(RenderEngineT *const engine,
     return r;
 
   if (auto r = fetchSwapchainImages(engine); r != Result::Success)
+    return r;
+
+  if (auto r = createDepthAttachment(engine); r != Result::Success)
     return r;
 
   if (auto r = allocateCommandBuffers(engine); r != Result::Success)

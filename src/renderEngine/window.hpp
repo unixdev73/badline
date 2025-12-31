@@ -46,6 +46,9 @@ using UniqueImageView =
 using UniqueFence =
     std::unique_ptr<VkFence_T, std::function<void(VkFence_T *const)>>;
 
+using UniqueImage =
+    std::unique_ptr<VkImage_T, std::function<void(VkImage_T *const)>>;
+
 struct WindowT {
   UniqueWindow handle{};
   uint32_t width{}, height{};
@@ -61,6 +64,9 @@ struct WindowT {
   UniqueSwapchain swapchain{};
   std::vector<VkImage> swapImages{};
   std::vector<UniqueImageView> swapImgViews{};
+
+  UniqueImage depthImg{};
+  UniqueImageView depthImgView{};
 
   UniqueSemaphore acquireSem{};
   std::vector<UniqueSemaphore> renderSem{};

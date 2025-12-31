@@ -192,6 +192,9 @@ Result toString(Result const result, std::string *const output) {
   case Result::ErrorVertexBufferCreationFailure:
     *output = "ErrorVertexBufferCreationFailure";
     break;
+  case Result::ErrorDepthImageCreationFailure:
+    *output = "ErrorDepthImageCreationFailure";
+    break;
   case Result::ErrorNoErrorMessage:
     *output = "ErrorNoErrorMessage";
     break;

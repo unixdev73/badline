@@ -22,6 +22,9 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include "allocator.hpp"
 #include "engine.hpp"
 #include "device.hpp"
+#include "window.hpp"
+#include <functional>
+#include <memory>
 
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
@@ -85,4 +88,45 @@ Result setVertices(RenderEngineT *const engine,
   return Result::Success;
 }
 
+Result createDepthImage(
+    RenderEngineT *const engine,
+    std::unique_ptr<VkImage_T, std::function<void(VkImage_T *const)>> *const
+        out) {
+
+  VkImageCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  info.imageType = VK_IMAGE_TYPE_2D;
+  info.extent = {.width = engine->window->width,
+                 .height = engine->window->height,
+                 .depth = 1};
+  info.mipLevels = 1;
+  info.arrayLayers = 1;
+  info.format = VK_FORMAT_D32_SFLOAT;
+  info.tiling = VK_IMAGE_TILING_OPTIMAL;
+  info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  info.samples = VK_SAMPLE_COUNT_1_BIT;
+
+  VmaAllocationCreateInfo allocInfo{};
+  allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+  allocInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+  allocInfo.priority = 1.f;
+
+  VkImage handle{};
+  VmaAllocation allocation{};
+  auto allocator = engine->device->allocator->handle;
+  auto result =
+      vmaCreateImage(allocator, &info, &allocInfo, &handle, &allocation, 0);
+
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create depth image", result);
+    return Result::ErrorDepthImageCreationFailure;
+  }
+
+  auto const dev = engine->device->handle.get();
+  *out = {handle, [allocator, allocation](VkImage_T *const p) {
+            vmaDestroyImage(allocator, p, allocation);
+          }};
+  return Result::Success;
+}
 } // namespace re

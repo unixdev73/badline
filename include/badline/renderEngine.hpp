@@ -63,6 +63,7 @@ enum class Result : int {
   ErrorVulkanPipelineLayoutCreationFailure,
   ErrorVulkanPipelineCreationFailure,
   ErrorVertexBufferCreationFailure,
+  ErrorDepthImageCreationFailure,
   ErrorNoErrorMessage
 };
 

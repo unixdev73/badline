@@ -20,7 +20,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "engine.hpp"
 #include "device.hpp"
-#include "vulkan/vulkan_core.h"
 #include "window.hpp"
 #include "vkresult.hpp"
 
@@ -133,14 +132,30 @@ Result render(RenderEngineT *const engine) {
 
   setRenderBarriers(engine, engine->window->swapImages[img]);
 
-  // Dynamic rendering
-  VkRenderingAttachmentInfo colorAttachment{};
-  colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-  colorAttachment.imageView = engine->window->swapImgViews[img].get();
-  colorAttachment.imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-  colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  colorAttachment.clearValue.color = {{0.f, 0.f, 0.f, 1.f}};
+  VkRenderingAttachmentInfo const colorAttachment{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .pNext = 0,
+      .imageView = engine->window->swapImgViews[img].get(),
+      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+      .resolveMode = {},
+      .resolveImageView = {},
+      .resolveImageLayout = {},
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = {.color = VkClearColorValue{.float32{0.f, 0.f, 0.f, 1.f}}}};
+
+  VkRenderingAttachmentInfo const depthAttachment{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .pNext = 0,
+      .imageView = engine->window->depthImgView.get(),
+      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+      .resolveMode = {},
+      .resolveImageView = {},
+      .resolveImageLayout = {},
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = {.depthStencil =
+                         VkClearDepthStencilValue{.depth = 1.f, .stencil = 0}}};
 
   VkRenderingInfo renderingInfo{};
   renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -149,6 +164,7 @@ Result render(RenderEngineT *const engine) {
   renderingInfo.layerCount = 1;
   renderingInfo.colorAttachmentCount = 1;
   renderingInfo.pColorAttachments = &colorAttachment;
+  renderingInfo.pDepthAttachment = &depthAttachment;
 
   vkCmdBeginRendering(cmd, &renderingInfo);
 
@@ -172,7 +188,6 @@ Result render(RenderEngineT *const engine) {
   vkCmdDraw(cmd, engine->vertexBufSize / sizeof(Vertex), 1, 0, 0);
 
   vkCmdEndRendering(cmd);
-
   vkEndCommandBuffer(cmd);
 
   auto const fence = engine->window->fence.get();
