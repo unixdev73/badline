@@ -23,37 +23,13 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
-#include <functional>
-#include <memory>
 
 namespace re {
-using UniqueWindow =
-    std::unique_ptr<GLFWwindow, std::function<void(GLFWwindow *const)>>;
-
-using UniqueSurface =
-    std::unique_ptr<VkSurfaceKHR_T, std::function<void(VkSurfaceKHR_T *const)>>;
-
-using UniqueSwapchain =
-    std::unique_ptr<VkSwapchainKHR_T,
-                    std::function<void(VkSwapchainKHR_T *const)>>;
-
-using UniqueSemaphore =
-    std::unique_ptr<VkSemaphore_T, std::function<void(VkSemaphore_T *const)>>;
-
-using UniqueImageView =
-    std::unique_ptr<VkImageView_T, std::function<void(VkImageView_T *const)>>;
-
-using UniqueFence =
-    std::unique_ptr<VkFence_T, std::function<void(VkFence_T *const)>>;
-
-using UniqueImage =
-    std::unique_ptr<VkImage_T, std::function<void(VkImage_T *const)>>;
-
 struct WindowT {
-  UniqueWindow handle{};
+  UniqueResource<GLFWwindow> handle{};
   uint32_t width{}, height{};
 
-  UniqueSurface surface{};
+  UniqueResource<VkSurfaceKHR_T> surface{};
   std::vector<VkSurfaceFormatKHR> surfaceFormats{};
   VkSurfaceFormatKHR surfaceFormat{};
   VkSurfaceCapabilitiesKHR surfaceCaps{};
@@ -61,18 +37,18 @@ struct WindowT {
   VkPresentModeKHR presentMode{VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR};
   std::vector<VkPresentModeKHR> presentModes{};
 
-  UniqueSwapchain swapchain{};
+  UniqueResource<VkSwapchainKHR_T> swapchain{};
   std::vector<VkImage> swapImages{};
-  std::vector<UniqueImageView> swapImgViews{};
+  std::vector<UniqueResource<VkImageView_T>> swapImgViews{};
 
-  UniqueImage depthImg{};
-  UniqueImageView depthImgView{};
+  UniqueResource<VkImage_T> depthImg{};
+  UniqueResource<VkImageView_T> depthImgView{};
 
-  UniqueSemaphore acquireSem{};
-  std::vector<UniqueSemaphore> renderSem{};
+  UniqueResource<VkSemaphore_T> acquireSem{};
+  std::vector<UniqueResource<VkSemaphore_T>> renderSem{};
   VkCommandBuffer graphicsBuf{VK_NULL_HANDLE};
 
-  UniqueFence fence{};
+  UniqueResource<VkFence_T> fence{};
 
   std::size_t activePipelineLayout{};
   std::size_t activePipeline{};

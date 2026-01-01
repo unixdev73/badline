@@ -280,7 +280,8 @@ Result createWindowSemaphores(RenderEngineT *const engine) {
   info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
   engine->window->renderSem.resize(engine->window->swapImages.size());
-  std::vector<UniqueSemaphore *> sem = {&engine->window->acquireSem};
+  std::vector<UniqueResource<VkSemaphore_T> *> sem = {
+      &engine->window->acquireSem};
   for (auto &s : engine->window->renderSem)
     sem.push_back(&s);
 
@@ -397,7 +398,7 @@ Result createPipelineLayout(RenderEngineT *const engine) {
 }
 
 Result createGraphicsPipeline(RenderEngineT *const engine) {
-  UniqueRes<VkShaderModule_T> vertex{}, fragment{};
+  UniqueResource<VkShaderModule_T> vertex{}, fragment{};
   auto result = createShaderModule(engine, "shaders/vertex.spv", &vertex);
   if (result != Result::Success)
     return result;
@@ -511,7 +512,7 @@ Result createGraphicsPipeline(RenderEngineT *const engine) {
   }
 
   engine->window->activePipeline = engine->device->pipelines.size();
-  engine->device->pipelines.push_back(UniqueRes<VkPipeline_T>{
+  engine->device->pipelines.push_back(UniqueResource<VkPipeline_T>{
       handle, [dev](VkPipeline_T *const p) { vkDestroyPipeline(dev, p, 0); }});
   return Result::Success;
 }

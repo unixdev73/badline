@@ -26,7 +26,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 namespace re {
 Result createShaderModule(RenderEngineT *const engine,
                           std::string const &spirvFile,
-                          UniqueShader *const out) {
+                          UniqueResource<VkShaderModule_T> *const out) {
   std::ifstream in{spirvFile, std::ios::ate | std::ios::binary};
   std::vector<uint32_t> byteCode{};
 

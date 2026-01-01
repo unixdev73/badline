@@ -25,14 +25,10 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <GLFW/glfw3.h>
 #include <string>
 #include <vector>
-#include <memory>
 
 namespace re {
-using UniqueInstance =
-    std::unique_ptr<VkInstance_T, void (*)(VkInstance_T *const)>;
-
 struct InstanceT {
-  UniqueInstance handle{nullptr, nullptr};
+  UniqueResource<VkInstance_T> handle{nullptr, nullptr};
   std::string title{};
   std::vector<std::string> missingReqExts{};
   std::vector<std::string> requestedExts{};

@@ -42,25 +42,21 @@ struct DeviceInfoT {
   QueueInfo presentQueue{};
 };
 
-template <typename T> using Deleter = std::function<void(T *const)>;
-template <typename T> using UniqueRes = std::unique_ptr<T, Deleter<T>>;
-
 struct AllocatorT;
-using UniqueAllocator = std::unique_ptr<AllocatorT>;
 
 struct DeviceT {
   VkPhysicalDevice identifier{VK_NULL_HANDLE};
-  UniqueRes<VkDevice_T> handle{nullptr, nullptr};
+  UniqueResource<VkDevice_T> handle{nullptr, nullptr};
 
   VkQueue present{VK_NULL_HANDLE};
   uint32_t presentFamIndex{};
   VkQueue graphics{VK_NULL_HANDLE};
   uint32_t graphicsFamIndex{};
 
-  UniqueRes<VkCommandPool_T> graphicsCmdPool{nullptr, nullptr};
-  UniqueAllocator allocator{};
-  std::vector<UniqueRes<VkPipelineLayout_T>> pipelineLayouts{};
-  std::vector<UniqueRes<VkPipeline_T>> pipelines{};
+  UniqueResource<VkCommandPool_T> graphicsCmdPool{nullptr, nullptr};
+  std::unique_ptr<AllocatorT> allocator{};
+  std::vector<UniqueResource<VkPipelineLayout_T>> pipelineLayouts{};
+  std::vector<UniqueResource<VkPipeline_T>> pipelines{};
 };
 
 Result createOptimalGPU(RenderEngineT *const engine);

@@ -22,7 +22,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
-#include <functional>
 #include <string>
 #include <memory>
 
@@ -31,9 +30,6 @@ struct InstanceT;
 struct DeviceT;
 struct WindowT;
 
-using UniqueBuf =
-    std::unique_ptr<VkBuffer_T, std::function<void(VkBuffer_T *const)>>;
-
 struct RenderEngineT {
   std::unique_ptr<InstanceT> instance{};
   std::unique_ptr<DeviceT> device{};
@@ -41,13 +37,13 @@ struct RenderEngineT {
 
   std::string errorMessage{};
 
-  UniqueBuf vertexBuf{};
+  UniqueResource<VkBuffer_T> vertexBuf{};
   std::size_t vertexBufSize{};
 
-  UniqueBuf indexBuf{};
+  UniqueResource<VkBuffer_T> indexBuf{};
   std::size_t indexBufSize{};
 
-  UniqueBuf instanceBuf{};
+  UniqueResource<VkBuffer_T> instanceBuf{};
   std::size_t instanceBufSize{};
 };
 

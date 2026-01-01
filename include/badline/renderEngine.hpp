@@ -21,6 +21,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #pragma once
 
 #include "vertex.hpp"
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -72,12 +73,14 @@ Result toString(Result const result, std::string *const output);
 } // namespace re
 
 namespace re {
+template <typename T>
+using UniqueResource = std::unique_ptr<T, std::function<void(T *const)>>;
+
 static constexpr auto BADLINE_VK_API_VERSION = VK_API_VERSION_1_3;
 
 struct RenderEngineT;
 
-using UniqueRenderEngine =
-    std::unique_ptr<RenderEngineT, void (*)(RenderEngineT *const)>;
+using UniqueRenderEngine = UniqueResource<RenderEngineT>;
 
 Result createRenderEngine(RenderEngineT **const handle,
                           std::string const &appName,

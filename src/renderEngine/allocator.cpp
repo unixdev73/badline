@@ -59,7 +59,7 @@ Result stagingCopy(RenderEngineT *const engine,
                    void const *const data,
                    std::size_t const size,
                    VkBufferUsageFlags const usage,
-                   UniqueBuf *const out) {
+                   UniqueResource<VkBuffer_T> *const out) {
 
   VkBufferCreateInfo bufCreateInfo{};
   bufCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -96,10 +96,10 @@ Result stagingCopy(RenderEngineT *const engine,
 }
 
 Result bufferCopy(RenderEngineT *const engine,
-                  UniqueBuf const *const src,
+                  UniqueResource<VkBuffer_T> const *const src,
                   std::size_t const size,
                   VkBufferUsageFlags const usage,
-                  UniqueBuf *const dst) {
+                  UniqueResource<VkBuffer_T> *const dst) {
 
   auto const dev = engine->device->handle.get();
   VkCommandPool cmdPool{};
@@ -111,9 +111,9 @@ Result bufferCopy(RenderEngineT *const engine,
     setErrMsg(engine, "Failed to create command pool for buffer copy", result);
     return Result::ErrorVulkanCommandPoolCreationFailure;
   }
-  UniqueRes<VkCommandPool_T> pool = {cmdPool, [dev](VkCommandPool_T *const p) {
-                                       vkDestroyCommandPool(dev, p, 0);
-                                     }};
+  UniqueResource<VkCommandPool_T> pool = {
+      cmdPool,
+      [dev](VkCommandPool_T *const p) { vkDestroyCommandPool(dev, p, 0); }};
 
   VkCommandBuffer cmd{};
   VkCommandBufferAllocateInfo cmdInfo{};
@@ -181,7 +181,7 @@ Result setVertices(RenderEngineT *const engine,
                    std::vector<Vertex> const *const vertices) {
 
   auto const size = sizeof(Vertex) * vertices->size();
-  UniqueBuf stagingBuf{};
+  UniqueResource<VkBuffer_T> stagingBuf{};
   auto result = stagingCopy(engine,
                             vertices->data(),
                             size,

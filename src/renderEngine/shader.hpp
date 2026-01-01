@@ -22,18 +22,12 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/renderEngine.hpp>
 #include <vulkan/vulkan.h>
-#include <functional>
-#include <memory>
 #include <string>
 
 namespace re {
 struct RenderEngineT;
 
-using UniqueShader =
-    std::unique_ptr<VkShaderModule_T,
-                    std::function<void(VkShaderModule_T *const)>>;
-
 Result createShaderModule(RenderEngineT *const engine,
                           std::string const &spirvFile,
-                          UniqueShader *const out);
+                          UniqueResource<VkShaderModule_T> *const out);
 } // namespace re

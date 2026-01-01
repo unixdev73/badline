@@ -54,7 +54,8 @@ void destroyRenderEngine(RenderEngineT *const handle) {
 UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug) {
   RenderEngineT *engine{};
   createRenderEngine(&engine, appName, debug);
-  return UniqueRenderEngine{engine, destroyRenderEngine};
+  return UniqueRenderEngine{
+      engine, [](RenderEngineT *const p) { destroyRenderEngine(p); }};
 }
 
 Result run(RenderEngineT *const handle) {
