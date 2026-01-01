@@ -112,7 +112,7 @@ Result setupCreateInfo(VkDeviceCreateInfo *const devCreateInfo,
       (devInfo->graphicsQueue.famIndex == devInfo->presentQueue.famIndex) ? 1
                                                                           : 2;
 
-  static char const *exts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+  static char const *exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
   devCreateInfo->enabledExtensionCount = sizeof(exts) / sizeof(exts[0]);
   devCreateInfo->ppEnabledExtensionNames = exts;
 
@@ -229,6 +229,73 @@ Result createLogicalDevice(RenderEngineT *const engine,
   return Result::Success;
 }
 
+Result createDescriptors(RenderEngineT *const engine) {
+  auto const dev = engine->device->handle.get();
+  constexpr uint32_t descriptorCount = RenderEngineT::maxDescriptors;
+
+  VkDescriptorPoolCreateInfo poolInfo{};
+  poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  poolInfo.maxSets = 1;
+
+  VkDescriptorPoolSize poolSizes[] = {VkDescriptorPoolSize{
+      .type = VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      .descriptorCount = descriptorCount}};
+
+  poolInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
+  poolInfo.pPoolSizes = poolSizes;
+
+  VkDescriptorPool pool{};
+  auto r = vkCreateDescriptorPool(dev, &poolInfo, 0, &pool);
+  if (r != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create descriptor pool", r);
+    return Result::ErrorVulkanDescriptorPoolCreationFailure;
+  }
+  engine->descPool = {pool, [dev](VkDescriptorPool_T *const p) {
+                        vkDestroyDescriptorPool(dev, p, 0);
+                      }};
+
+  VkDescriptorSetLayoutCreateInfo descInfo{};
+  descInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+
+  VkDescriptorSetLayoutBinding bindings[] = {VkDescriptorSetLayoutBinding{
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      .descriptorCount = descriptorCount,
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .pImmutableSamplers = 0}};
+
+  descInfo.bindingCount = sizeof(bindings) / sizeof(bindings[0]);
+  descInfo.pBindings = bindings;
+
+  VkDescriptorSetLayout descLayout{};
+  r = vkCreateDescriptorSetLayout(dev, &descInfo, 0, &descLayout);
+  if (r != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create descriptor set layout", r);
+    return Result::ErrorVulkanDescriptorSetLayoutCreationFailure;
+  }
+
+  engine->descLayout = {descLayout, [dev](VkDescriptorSetLayout_T *const p) {
+                          vkDestroyDescriptorSetLayout(dev, p, 0);
+                        }};
+
+  VkDescriptorSetAllocateInfo descAlloc{};
+  descAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  descAlloc.descriptorPool = engine->descPool.get();
+  descAlloc.descriptorSetCount = 1;
+  descAlloc.pSetLayouts = &descLayout;
+
+  VkDescriptorSet descriptor{};
+  r = vkAllocateDescriptorSets(dev, &descAlloc, &descriptor);
+
+  if (r != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to allocate descriptor set", r);
+    return Result::ErrorVulkanDescriptorSetAllocationFailure;
+  }
+
+  engine->descSets.push_back(descriptor);
+  return Result::Success;
+}
+
 Result createOptimalGPU(RenderEngineT *const engine) {
   engine->device = std::make_unique<DeviceT>();
 
@@ -248,6 +315,9 @@ Result createOptimalGPU(RenderEngineT *const engine) {
 
   if (auto r = createLogicalDevice(engine, &devCreateInfo, phy, &devInfo);
       r != Result::Success)
+    return r;
+
+  if (auto r = createDescriptors(engine); r != Result::Success)
     return r;
 
   return Result::Success;

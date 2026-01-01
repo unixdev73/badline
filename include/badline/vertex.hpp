@@ -27,7 +27,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 namespace re {
 struct Vertex {
-  glm::vec4 position{};
+  glm::vec3 position{};
   glm::vec4 color{};
 
   static VkVertexInputBindingDescription bindingDescription() {
@@ -39,16 +39,16 @@ struct Vertex {
 
   static std::array<VkVertexInputAttributeDescription, 2>
   attributeDescription() {
-    return {VkVertexInputAttributeDescription{.location = 0,
-                                              .binding = 0,
-                                              .format =
-                                                  VK_FORMAT_R32G32B32A32_SFLOAT,
-                                              .offset = 0},
-            VkVertexInputAttributeDescription{.location = 1,
-                                              .binding = 0,
-                                              .format =
-                                                  VK_FORMAT_R32G32B32A32_SFLOAT,
-                                              .offset = sizeof(position)}};
+    return {
+        VkVertexInputAttributeDescription{.location = 0,
+                                          .binding = 0,
+                                          .format = VK_FORMAT_R32G32B32_SFLOAT,
+                                          .offset = 0},
+        VkVertexInputAttributeDescription{.location = 1,
+                                          .binding = 0,
+                                          .format =
+                                              VK_FORMAT_R32G32B32A32_SFLOAT,
+                                          .offset = sizeof(position)}};
   }
 };
 } // namespace re

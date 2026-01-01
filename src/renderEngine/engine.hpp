@@ -30,12 +30,21 @@ struct InstanceT;
 struct DeviceT;
 struct WindowT;
 
+struct PushConstants {
+  glm::mat4 camProj{glm::mat4(1)};
+  glm::mat4 camView{glm::mat4(1)};
+};
+
+enum class BufferUsage { VertexBuffer, IndexBuffer, InstanceBuffer };
+
 struct RenderEngineT {
   std::unique_ptr<InstanceT> instance{};
   std::unique_ptr<DeviceT> device{};
   std::unique_ptr<WindowT> window{};
 
   std::string errorMessage{};
+
+  PushConstants camMats{};
 
   UniqueResource<VkBuffer_T> vertexBuf{};
   std::size_t vertexBufSize{};
@@ -45,6 +54,13 @@ struct RenderEngineT {
 
   UniqueResource<VkBuffer_T> instanceBuf{};
   std::size_t instanceBufSize{};
+  uint32_t instanceCount{};
+
+  UniqueResource<VkDescriptorPool_T> descPool{};
+  UniqueResource<VkDescriptorSetLayout_T> descLayout{};
+  std::vector<VkDescriptorSet> descSets{};
+
+  static constexpr std::size_t maxDescriptors{100};
 };
 
 Result render(RenderEngineT *const engine);

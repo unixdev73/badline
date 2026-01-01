@@ -19,6 +19,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "app.hpp"
+#include <GLFW/glfw3.h>
 #include <filesystem>
 #include <iostream>
 #include <vector>
@@ -43,25 +44,131 @@ int main(int const argc, char const *const *const argv) {
 }
 
 namespace demo {
-int createTriangle(App *const a) {
+int createScene(App *const a) {
   std::vector<re::Vertex> vertices = {
-      {{-0.75f, 0.75f, 0.f, 1.f}, {1.f, 0.f, 0.f, 1.f}},
-      {{0.f, -0.75f, 0.f, 1.f}, {0.f, 1.f, 0.f, 1.f}},
-      {{0.75f, 0.75f, 0.f, 1.f}, {0.f, 0.f, 1.f, 1.f}},
+      {{-1.000000, 1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
+      {{-1.000000, -1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
+      {{1.000000, -1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
+      {{1.000000, 1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
+      {{-1.000000, 1.000000, -0.500000}, {1.f, 0.f, 0.f, 1.f}},
+      {{-1.000000, -1.000000, -0.500000}, {1.f, 0.f, 0.f, 1.f}},
+      {{1.000000, -1.000000, -0.500000}, {1.f, 0.f, 0.f, 1.f}},
+      {{1.000000, 1.000000, -0.500000}, {1.f, 0.f, 0.f, 1.f}},
+  };
+
+  std::vector<uint32_t> indices = {
+      0, 1, 2, 2, 3, 0, // Front face
+      4, 5, 6, 6, 7, 4, // Back face
+      0, 3, 7, 7, 4, 0, // Left face
+      1, 2, 6, 6, 5, 1, // Right face
+      3, 2, 6, 6, 7, 3, // Top face
+      0, 1, 5, 5, 4, 0  // Bottom face
   };
 
   if (auto r = re::setVertices(a->engine.get(), &vertices);
-      r != re::Result::Success)
+      r != re::Result::Success) {
+    std::cerr << "Failed to set vertices. " << std::endl;
     return 1;
+  }
 
+  if (auto r = re::setIndices(a->engine.get(), &indices);
+      r != re::Result::Success) {
+    std::cerr << "Failed to set indices. " << std::endl;
+    return 1;
+  }
+
+  auto &instances = a->instances;
+  std::size_t instCnt = 3;
+  instances.resize(instCnt);
+
+  for (std::size_t i = 0; i < instances.size(); ++i) {
+    instances[i] =
+        glm::translate(glm::mat4(1), glm::vec3(-5.f + i * 5.f, -1.f, 0.f));
+  }
+
+  a->view = glm::translate(glm::mat4(1), glm::vec3(0, 0, -15));
+
+  if (auto r = re::setInstances(a->engine.get(), &instances, instances.size());
+      r != re::Result::Success) {
+    std::cerr << "Failed to set instances. " << std::endl;
+    return 1;
+  }
+  return 0;
+}
+
+int update(App *const a) {
+  auto &instances = a->instances;
+  auto &proj = a->proj;
+  auto &view = a->view;
+
+  static const glm::mat4 rotX =
+      glm::rotate(glm::mat4(1), 0.001f, glm::vec3(1, 0, 0));
+  static const glm::mat4 rotY =
+      glm::rotate(glm::mat4(1), 0.001f, glm::vec3(0, 1, 0));
+  static const glm::mat4 rotZ =
+      glm::rotate(glm::mat4(1), 0.001f, glm::vec3(0, 0, 1));
+
+  for (std::size_t i = 0; i < instances.size(); ++i) {
+    switch (i % 3) {
+    case 0:
+      instances[i] = instances[i] * rotX;
+      break;
+    case 1:
+      // instances[i] = instances[i] * rotY;
+      break;
+    case 2:
+      instances[i] = instances[i] * rotZ;
+      break;
+    }
+  }
+
+  if (auto r = re::setInstances(a->engine.get(), &instances);
+      r != re::Result::Success) {
+    std::cerr << "Failed to set instances. " << std::endl;
+    return 1;
+  }
+
+  auto const aspect = float(a->windowWidth) / float(a->windowHeight);
+  proj = glm::perspective(glm::radians(45.f), aspect, 0.1f, 100.f);
+  view = view * rotY;
+  re::setProjection(a->engine.get(), proj);
+  re::setView(a->engine.get(), view);
   return 0;
 }
 
 int run(App *const a) {
-  if (createTriangle(a))
+  if (createScene(a)) {
+    std::cerr << "Creating scene failed" << std::endl;
     return 1;
+  }
 
-  return !(re::run(a->engine.get()) == re::Result::Success);
+  auto const engine = a->engine.get();
+  bool windowOpen = true;
+  re::isWindowOpen(engine, &windowOpen);
+
+  while (windowOpen) {
+    glfwPollEvents();
+
+    if (update(a)) {
+      std::cerr << "Update failed" << std::endl;
+      return 1;
+    }
+
+    auto r = re::render(engine);
+    if (r != re::Result::Success) {
+      std::cerr << "Rendering failed" << std::endl;
+      return 1;
+    }
+
+    bool keyPressed = false;
+    re::isKeyPressed(engine, GLFW_KEY_ESCAPE, &keyPressed);
+    if (keyPressed)
+      re::closeWindow(engine);
+
+    re::isWindowOpen(engine, &windowOpen);
+  }
+
+  return 0;
 }
 
 int initialize(App *const a) {
@@ -187,6 +294,8 @@ int openWindow(App *const a) {
     return 1;
   }
 
+  a->windowWidth = width;
+  a->windowHeight = height;
   return 0;
 }
 } // namespace demo

@@ -379,6 +379,16 @@ Result createPipelineLayout(RenderEngineT *const engine) {
   VkDescriptorSetLayout layouts[] = {{}};
   info.pSetLayouts = layouts;
   info.setLayoutCount = 0;
+  VkPushConstantRange ranges[] = {
+      VkPushConstantRange{.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                          .offset = 0,
+                          .size = sizeof(engine->camMats)}};
+  info.pushConstantRangeCount = sizeof(ranges) / sizeof(ranges[0]);
+  info.pPushConstantRanges = ranges;
+
+  auto const descLayout = engine->descLayout.get();
+  info.pSetLayouts = &descLayout;
+  info.setLayoutCount = 1;
 
   auto const dev = engine->device->handle.get();
   VkPipelineLayout handle{};
@@ -395,7 +405,7 @@ Result createPipelineLayout(RenderEngineT *const engine) {
          vkDestroyPipelineLayout(dev, p, 0);
        }});
   return Result::Success;
-}
+} // namespace re
 
 Result createGraphicsPipeline(RenderEngineT *const engine) {
   UniqueResource<VkShaderModule_T> vertex{}, fragment{};
@@ -464,9 +474,29 @@ Result createGraphicsPipeline(RenderEngineT *const engine) {
   depthStencilState.maxDepthBounds = 1.f;
   depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
 
+  VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+  colorBlendAttachment.blendEnable = VK_TRUE;
+  colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+  colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+  colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+  colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+  colorBlendAttachment.colorWriteMask =
+      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
   VkPipelineColorBlendStateCreateInfo colorBlendState{};
   colorBlendState.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  colorBlendState.logicOpEnable = VK_TRUE;
+  colorBlendState.logicOp = VK_LOGIC_OP_COPY;
+  colorBlendState.attachmentCount = 1;
+  colorBlendState.pAttachments = &colorBlendAttachment;
+  colorBlendState.blendConstants[0] = 0.0f;
+  colorBlendState.blendConstants[1] = 0.0f;
+  colorBlendState.blendConstants[2] = 0.0f;
+  colorBlendState.blendConstants[3] = 0.0f;
 
   VkPipelineDynamicStateCreateInfo dynamicState{};
   dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;

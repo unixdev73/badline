@@ -58,22 +58,51 @@ UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug) {
       engine, [](RenderEngineT *const p) { destroyRenderEngine(p); }};
 }
 
-Result run(RenderEngineT *const handle) {
+Result isKeyPressed(RenderEngineT *const handle, int key, bool *const output) {
   if (!handle)
     return Result::ErrorNullptrHandle;
-  if (!handle->window->handle)
-    return Result::ErrorNullptrWindow;
+  if (!output)
+    return Result::ErrorNullptrOutput;
 
-  while (!glfwWindowShouldClose(handle->window->handle.get())) {
-    glfwPollEvents();
+  auto const win = handle->window->handle.get();
+  *output = glfwGetKey(win, key) == GLFW_PRESS;
+  return Result::Success;
+}
 
-    if (glfwGetKey(handle->window->handle.get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
-      glfwSetWindowShouldClose(handle->window->handle.get(), GLFW_TRUE);
+Result setProjection(RenderEngineT *const handle, glm::mat4 const projection) {
+  if (!handle)
+    return Result::ErrorNullptrHandle;
+  handle->camMats.camProj = projection;
+  return Result::Success;
+}
 
-    render(handle);
-  }
+Result setView(RenderEngineT *const handle, glm::mat4 const view) {
+  if (!handle)
+    return Result::ErrorNullptrHandle;
+  handle->camMats.camView = view;
+  return Result::Success;
+}
 
+Result closeWindow(RenderEngineT *const handle) {
+  if (!handle)
+    return Result::ErrorNullptrHandle;
+  glfwSetWindowShouldClose(handle->window->handle.get(), GLFW_TRUE);
   vkDeviceWaitIdle(handle->device->handle.get());
+  return Result::Success;
+}
+
+Result isWindowOpen(RenderEngineT *const handle, bool *const output) {
+  if (!handle)
+    return Result::ErrorNullptrHandle;
+  if (!output)
+    return Result::ErrorNullptrOutput;
+
+  *output = false;
+
+  if (handle->window && handle->window->handle &&
+      glfwWindowShouldClose(handle->window->handle.get()) == GLFW_FALSE)
+    *output = true;
+
   return Result::Success;
 }
 
@@ -198,6 +227,18 @@ Result toString(Result const result, std::string *const output) {
     break;
   case Result::ErrorCopyToStagingBufferFailure:
     *output = "ErrorCopyToStagingBufferFailure";
+    break;
+  case Result::ErrorUnsupportedBufferPurpose:
+    *output = "ErrorUnsupportedBufferPurpose";
+    break;
+  case Result::ErrorVulkanDescriptorPoolCreationFailure:
+    *output = "ErrorVulkanDescriptorPoolCreationFailure";
+    break;
+  case Result::ErrorVulkanDescriptorSetLayoutCreationFailure:
+    *output = "ErrorVulkanDescriptorSetLayoutCreationFailure";
+    break;
+  case Result::ErrorVulkanDescriptorSetAllocationFailure:
+    *output = "ErrorVulkanDescriptorSetAllocationFailure";
     break;
   case Result::ErrorNoErrorMessage:
     *output = "ErrorNoErrorMessage";

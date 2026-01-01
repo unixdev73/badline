@@ -20,7 +20,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include "vertex.hpp"
+#include <badline/vertex.hpp>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -66,6 +66,10 @@ enum class Result : int {
   ErrorVulkanBufferCreationFailure,
   ErrorDepthImageCreationFailure,
   ErrorCopyToStagingBufferFailure,
+  ErrorUnsupportedBufferPurpose,
+  ErrorVulkanDescriptorPoolCreationFailure,
+  ErrorVulkanDescriptorSetLayoutCreationFailure,
+  ErrorVulkanDescriptorSetAllocationFailure,
   ErrorNoErrorMessage
 };
 
@@ -94,10 +98,22 @@ Result createWindow(RenderEngineT *const handle,
                     uint32_t const width,
                     uint32_t const height);
 
-Result setVertices(RenderEngineT *const engine,
-                   std::vector<Vertex> const *const vertices);
+Result setProjection(RenderEngineT *const handle, glm::mat4 const projection);
+Result setView(RenderEngineT *const handle, glm::mat4 const view);
 
-Result run(RenderEngineT *const handle);
+Result setVertices(RenderEngineT *const handle,
+                   std::vector<Vertex> const *const vertices);
+Result setIndices(RenderEngineT *const handle,
+                  std::vector<uint32_t> const *const indices);
+Result setInstances(RenderEngineT *const handle,
+                    std::vector<glm::mat4> const *const instances,
+                    std::size_t const allocElem = 0);
+
+Result isWindowOpen(RenderEngineT *const handle, bool *const output);
+Result closeWindow(RenderEngineT *const handle);
+Result isKeyPressed(RenderEngineT *const handle, int key, bool *const output);
+
+Result render(RenderEngineT *const handle);
 
 Result getErrorMessage(RenderEngineT const *const handle,
                        std::string *const message);

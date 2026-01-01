@@ -118,6 +118,46 @@ Result getNextImage(RenderEngineT *const engine, uint32_t *const imgIndex) {
   return Result::Success;
 }
 
+Result setupRenderingInfo(RenderEngineT *const engine,
+                          VkRenderingInfo *const renderingInfo,
+                          VkRenderingAttachmentInfo *const color,
+                          VkRenderingAttachmentInfo *const depth,
+                          uint32_t const img) {
+  *color = VkRenderingAttachmentInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .pNext = 0,
+      .imageView = engine->window->swapImgViews[img].get(),
+      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+      .resolveMode = {},
+      .resolveImageView = {},
+      .resolveImageLayout = {},
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = {.color = VkClearColorValue{.float32{0.f, 0.f, 0.f, 1.f}}}};
+
+  *depth = VkRenderingAttachmentInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .pNext = 0,
+      .imageView = engine->window->depthImgView.get(),
+      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+      .resolveMode = {},
+      .resolveImageView = {},
+      .resolveImageLayout = {},
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = {.depthStencil =
+                         VkClearDepthStencilValue{.depth = 1.f, .stencil = 0}}};
+
+  renderingInfo->sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+  renderingInfo->renderArea = {{0, 0},
+                               {engine->window->width, engine->window->height}};
+  renderingInfo->layerCount = 1;
+  renderingInfo->colorAttachmentCount = 1;
+  renderingInfo->pColorAttachments = color;
+  renderingInfo->pDepthAttachment = depth;
+  return Result::Success;
+}
+
 Result render(RenderEngineT *const engine) {
   VkCommandBuffer const cmd = engine->window->graphicsBuf;
   auto const dev = engine->device->handle.get();
@@ -132,41 +172,17 @@ Result render(RenderEngineT *const engine) {
 
   setRenderBarriers(engine, engine->window->swapImages[img]);
 
-  VkRenderingAttachmentInfo const colorAttachment{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .pNext = 0,
-      .imageView = engine->window->swapImgViews[img].get(),
-      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-      .resolveMode = {},
-      .resolveImageView = {},
-      .resolveImageLayout = {},
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = {.color = VkClearColorValue{.float32{0.f, 0.f, 0.f, 1.f}}}};
-
-  VkRenderingAttachmentInfo const depthAttachment{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .pNext = 0,
-      .imageView = engine->window->depthImgView.get(),
-      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-      .resolveMode = {},
-      .resolveImageView = {},
-      .resolveImageLayout = {},
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = {.depthStencil =
-                         VkClearDepthStencilValue{.depth = 1.f, .stencil = 0}}};
-
+  VkRenderingAttachmentInfo colorAttachment{};
+  VkRenderingAttachmentInfo depthAttachment{};
   VkRenderingInfo renderingInfo{};
-  renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-  renderingInfo.renderArea = {{0, 0},
-                              {engine->window->width, engine->window->height}};
-  renderingInfo.layerCount = 1;
-  renderingInfo.colorAttachmentCount = 1;
-  renderingInfo.pColorAttachments = &colorAttachment;
-  renderingInfo.pDepthAttachment = &depthAttachment;
+  setupRenderingInfo(
+      engine, &renderingInfo, &colorAttachment, &depthAttachment, img);
 
   vkCmdBeginRendering(cmd, &renderingInfo);
+
+  auto const pipe =
+      engine->device->pipelines[engine->window->activePipeline].get();
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
 
   VkViewport const vp{.x = 0,
                       .y = 0,
@@ -179,13 +195,52 @@ Result render(RenderEngineT *const engine) {
   VkRect2D const sc{.offset = {0, 0},
                     .extent = {engine->window->width, engine->window->height}};
   vkCmdSetScissorWithCount(cmd, 1, &sc);
-  auto const pipe =
-      engine->device->pipelines[engine->window->activePipeline].get();
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+
+  auto const layout =
+      engine->device->pipelineLayouts[engine->window->activePipelineLayout]
+          .get();
+  vkCmdPushConstants(cmd,
+                     layout,
+                     VK_SHADER_STAGE_VERTEX_BIT,
+                     0,
+                     sizeof(engine->camMats),
+                     &engine->camMats);
+
   auto const vertexBuf = engine->vertexBuf.get();
   VkDeviceSize const offsets[] = {0};
   vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuf, offsets);
-  vkCmdDraw(cmd, engine->vertexBufSize / sizeof(Vertex), 1, 0, 0);
+
+  VkDescriptorBufferInfo bufInf{};
+  bufInf.buffer = engine->instanceBuf.get();
+  bufInf.offset = 0;
+  bufInf.range = engine->instanceBufSize;
+
+  auto const descSet = engine->descSets.at(0);
+  VkWriteDescriptorSet descriptorWrite = {};
+  descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  descriptorWrite.dstSet = descSet;
+  descriptorWrite.dstBinding = 0;
+  descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  descriptorWrite.descriptorCount = 1;
+  descriptorWrite.pBufferInfo = &bufInf;
+  descriptorWrite.dstArrayElement = 0;
+  std::vector<VkWriteDescriptorSet> writeInfo(RenderEngineT::maxDescriptors,
+                                              descriptorWrite);
+
+  for (std::size_t i = 0; i < RenderEngineT::maxDescriptors; ++i)
+    writeInfo[i].dstArrayElement = i;
+
+  vkUpdateDescriptorSets(dev, writeInfo.size(), writeInfo.data(), 0, nullptr);
+  vkCmdBindDescriptorSets(
+      cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &descSet, 0, 0);
+
+  vkCmdBindIndexBuffer(cmd, engine->indexBuf.get(), 0, VK_INDEX_TYPE_UINT32);
+  vkCmdDrawIndexed(cmd,
+                   engine->indexBufSize / sizeof(uint32_t),
+                   engine->instanceCount,
+                   0,
+                   0,
+                   0);
 
   vkCmdEndRendering(cmd);
   vkEndCommandBuffer(cmd);
