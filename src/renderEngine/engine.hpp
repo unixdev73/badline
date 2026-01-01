@@ -31,6 +31,9 @@ struct InstanceT;
 struct DeviceT;
 struct WindowT;
 
+using UniqueBuf =
+    std::unique_ptr<VkBuffer_T, std::function<void(VkBuffer_T *const)>>;
+
 struct RenderEngineT {
   std::unique_ptr<InstanceT> instance{};
   std::unique_ptr<DeviceT> device{};
@@ -38,8 +41,14 @@ struct RenderEngineT {
 
   std::string errorMessage{};
 
-  std::unique_ptr<VkBuffer_T, std::function<void(VkBuffer_T *const)>> vertexBuf;
+  UniqueBuf vertexBuf{};
   std::size_t vertexBufSize{};
+
+  UniqueBuf indexBuf{};
+  std::size_t indexBufSize{};
+
+  UniqueBuf instanceBuf{};
+  std::size_t instanceBufSize{};
 };
 
 Result render(RenderEngineT *const engine);

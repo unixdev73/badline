@@ -55,12 +55,16 @@ std::unique_ptr<AllocatorT> createAllocator(VkInstance const inst,
   return alloc;
 }
 
-Result setVertices(RenderEngineT *const engine,
-                   std::vector<Vertex> const *const vertices) {
+Result stagingCopy(RenderEngineT *const engine,
+                   void const *const data,
+                   std::size_t const size,
+                   VkBufferUsageFlags const usage,
+                   UniqueBuf *const out) {
+
   VkBufferCreateInfo bufCreateInfo{};
   bufCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufCreateInfo.size = sizeof(Vertex) * vertices->size();
-  bufCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  bufCreateInfo.size = size;
+  bufCreateInfo.usage = usage | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
   VmaAllocationCreateInfo allocCreateInfo{};
   allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
@@ -73,18 +77,129 @@ Result setVertices(RenderEngineT *const engine,
   auto r = vmaCreateBuffer(
       allocator, &bufCreateInfo, &allocCreateInfo, &buf, &alloc, nullptr);
   if (r != VK_SUCCESS) {
-    setErrMsg(engine, "Failed to create vertex buffer", r);
-    return Result::ErrorVertexBufferCreationFailure;
+    setErrMsg(engine, "Failed to create staging buffer", r);
+    return Result::ErrorVulkanBufferCreationFailure;
   }
 
   auto const dev = engine->device->handle.get();
-  engine->vertexBuf = {buf, [allocator, alloc](VkBuffer_T *const p) {
-                         vmaDestroyBuffer(allocator, p, alloc);
-                       }};
-  engine->vertexBufSize = bufCreateInfo.size;
+  *out = {buf, [allocator, alloc](VkBuffer_T *const p) {
+            vmaDestroyBuffer(allocator, p, alloc);
+          }};
 
-  vmaCopyMemoryToAllocation(
-      allocator, vertices->data(), alloc, 0, bufCreateInfo.size);
+  r = vmaCopyMemoryToAllocation(allocator, data, alloc, 0, bufCreateInfo.size);
+  if (r != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to copy data to staging buffer", r);
+    return Result::ErrorCopyToStagingBufferFailure;
+  }
+
+  return Result::Success;
+}
+
+Result bufferCopy(RenderEngineT *const engine,
+                  UniqueBuf const *const src,
+                  std::size_t const size,
+                  VkBufferUsageFlags const usage,
+                  UniqueBuf *const dst) {
+
+  auto const dev = engine->device->handle.get();
+  VkCommandPool cmdPool{};
+  VkCommandPoolCreateInfo poolInfo{};
+  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  poolInfo.queueFamilyIndex = engine->device->graphicsFamIndex;
+  auto result = vkCreateCommandPool(dev, &poolInfo, 0, &cmdPool);
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create command pool for buffer copy", result);
+    return Result::ErrorVulkanCommandPoolCreationFailure;
+  }
+  UniqueRes<VkCommandPool_T> pool = {cmdPool, [dev](VkCommandPool_T *const p) {
+                                       vkDestroyCommandPool(dev, p, 0);
+                                     }};
+
+  VkCommandBuffer cmd{};
+  VkCommandBufferAllocateInfo cmdInfo{};
+  cmdInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  cmdInfo.commandBufferCount = 1;
+  cmdInfo.commandPool = engine->device->graphicsCmdPool.get();
+  cmdInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+  result = vkAllocateCommandBuffers(dev, &cmdInfo, &cmd);
+  if (result != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to allocate command buf for buffer copy", result);
+    return Result::ErrorVulkanCommandBufferAllocationFailure;
+  }
+
+  VkBufferCreateInfo bufCreateInfo{};
+  bufCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  bufCreateInfo.size = size;
+  bufCreateInfo.usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+  VmaAllocationCreateInfo allocCreateInfo{};
+  allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+  allocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+
+  VkBuffer buf;
+  VmaAllocation alloc;
+  VmaAllocator allocator = engine->device->allocator.get()->handle;
+  auto r = vmaCreateBuffer(
+      allocator, &bufCreateInfo, &allocCreateInfo, &buf, &alloc, nullptr);
+  if (r != VK_SUCCESS) {
+    setErrMsg(engine, "Failed to create dst buffer for copy", r);
+    return Result::ErrorVulkanBufferCreationFailure;
+  }
+
+  *dst = {buf, [allocator, alloc](VkBuffer_T *const p) {
+            vmaDestroyBuffer(allocator, p, alloc);
+          }};
+
+  VkBufferCopy bufCopy{};
+  bufCopy.dstOffset = 0;
+  bufCopy.srcOffset = 0;
+  bufCopy.size = size;
+
+  VkCommandBufferBeginInfo cmdBegInfo{};
+  cmdBegInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  cmdBegInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  vkBeginCommandBuffer(cmd, &cmdBegInfo);
+  vkCmdCopyBuffer(cmd, src->get(), dst->get(), 1, &bufCopy);
+  vkEndCommandBuffer(cmd);
+
+  VkSubmitInfo2 subInf{};
+  subInf.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+  subInf.commandBufferInfoCount = 1;
+  VkCommandBufferSubmitInfo cmdSubInf{};
+  cmdSubInf.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+  cmdSubInf.commandBuffer = cmd;
+  subInf.pCommandBufferInfos = &cmdSubInf;
+  auto const fence = engine->window->fence.get();
+  vkQueueSubmit2(engine->device->graphics, 1, &subInf, fence);
+  vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+  vkResetFences(dev, 1, &fence);
+  return Result::Success;
+}
+
+Result setVertices(RenderEngineT *const engine,
+                   std::vector<Vertex> const *const vertices) {
+
+  auto const size = sizeof(Vertex) * vertices->size();
+  UniqueBuf stagingBuf{};
+  auto result = stagingCopy(engine,
+                            vertices->data(),
+                            size,
+                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                            &stagingBuf);
+
+  if (result != Result::Success)
+    return result;
+
+  result = bufferCopy(engine,
+                      &stagingBuf,
+                      size,
+                      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                      &engine->vertexBuf);
+
+  if (result != Result::Success)
+    return result;
+  engine->vertexBufSize = size;
   return Result::Success;
 }
 

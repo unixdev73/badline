@@ -189,11 +189,14 @@ Result toString(Result const result, std::string *const output) {
   case Result::ErrorVulkanPipelineCreationFailure:
     *output = "ErrorVulkanPipelineCreationFailure";
     break;
-  case Result::ErrorVertexBufferCreationFailure:
-    *output = "ErrorVertexBufferCreationFailure";
+  case Result::ErrorVulkanBufferCreationFailure:
+    *output = "ErrorVulkanBufferCreationFailure";
     break;
   case Result::ErrorDepthImageCreationFailure:
     *output = "ErrorDepthImageCreationFailure";
+    break;
+  case Result::ErrorCopyToStagingBufferFailure:
+    *output = "ErrorCopyToStagingBufferFailure";
     break;
   case Result::ErrorNoErrorMessage:
     *output = "ErrorNoErrorMessage";

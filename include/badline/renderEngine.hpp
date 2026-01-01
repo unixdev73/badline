@@ -62,8 +62,9 @@ enum class Result : int {
   ErrorVulkanShaderModuleCreationFailure,
   ErrorVulkanPipelineLayoutCreationFailure,
   ErrorVulkanPipelineCreationFailure,
-  ErrorVertexBufferCreationFailure,
+  ErrorVulkanBufferCreationFailure,
   ErrorDepthImageCreationFailure,
+  ErrorCopyToStagingBufferFailure,
   ErrorNoErrorMessage
 };
 
