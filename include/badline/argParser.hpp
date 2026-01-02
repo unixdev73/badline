@@ -20,97 +20,69 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <string>
-#include <memory>
-
 namespace ap {
-struct ArgParserT;
+struct ArgParser;
 
-enum class Result : int {
-  Success,
+/* Creates a new instance of the ArgParser struct.
+ * If creation fails *handle = nullptr.
+ * If handle = nullptr, the procedure returns.
+ */
+void createArgParser(ArgParser **const handle);
 
-  ErrorNullptrHandle,
-  ErrorNullptrInput,
-  ErrorNullptrCount,
-  ErrorNullptrPosition,
-  ErrorNullptrValue,
-  ErrorNullptrOutput,
+/* Deletes an instance of ArgParser.
+ */
+void destroyArgParser(ArgParser const *const handle);
 
-  ErrorArgLongFormNotUnique,
-  ErrorArgShortFormNotUnique,
+/* Every function that returns bool will leave an error message
+ * if it returns false.
+ *
+ * If handle = nullptr, the procedure returns.
+ */
+void getErrorMessage(ArgParser const *const handle, char const **const message);
 
-  ErrorArgLongFormNotValid,
-  ErrorArgShortFormNotValid,
-  ErrorBeginEndRangeNotValid,
-  ErrorInstanceIndexNotValid,
+bool addFlag(ArgParser *const handle,
+             char const *const argLongForm,
+             char const argShortForm = 0);
 
-  ErrorTermTokenNotValid,
-  ErrorMemoryAllocationFailure,
-  ErrorRuleIdentifierNotValid,
-  ErrorExpectedArgListToken,
-
-  ErrorStartSymbolNotDerivedFromInput,
-  ErrorInputTokenNotValid,
-  ErrorOptionRequiresValue
-};
-
-Result toString(Result const result, std::string *const output);
-
-Result createArgParser(ArgParserT **const handle);
-
-void destroyArgParser(ArgParserT const *const handle);
-
-using UniqueArgParser =
-    std::unique_ptr<ArgParserT, void (*)(ArgParserT const *const)>;
-
-UniqueArgParser createArgParser();
-
-Result addFlag(ArgParserT *const handle,
-               std::string const &argLongForm,
+bool addOption(ArgParser *const handle,
+               char const *const argLongForm,
                char const argShortForm = 0);
 
-Result addOption(ArgParserT *const handle,
-                 std::string const &argLongForm,
-                 char const argShortForm = 0);
+bool parse(ArgParser *const handle,
+           char const *const *const input,
+           unsigned const begin,
+           unsigned const end);
 
-Result parse(ArgParserT *const handle,
-             char const *const *const input,
-             std::size_t const begin,
-             std::size_t const end);
+bool getFlagCount(ArgParser const *const handle,
+                  char const *const argLongForm,
+                  unsigned *const count);
 
-Result getErrorPosition(ArgParserT *const handle, std::size_t *const output);
+bool getFlagPosition(ArgParser const *const handle,
+                     char const *const argLongForm,
+                     unsigned const instance,
+                     unsigned *const position);
 
-Result getFlagCount(ArgParserT const *const handle,
-                    std::string const &argLongForm,
-                    std::size_t *const count);
+bool getOptionCount(ArgParser const *const handle,
+                    char const *argLongForm,
+                    unsigned *const count);
 
-Result getFlagInstancePosition(ArgParserT const *const handle,
-                               std::string const &argLongForm,
-                               std::size_t const instanceIndex,
-                               std::size_t *const position);
+bool getOptionPosition(ArgParser const *const handle,
+                       char const *const argLongForm,
+                       unsigned const instance,
+                       unsigned *const position);
 
-Result getOptionCount(ArgParserT const *const handle,
-                      std::string const &argLongForm,
-                      std::size_t *const count);
+bool getOptionValue(ArgParser const *const handle,
+                    char const *const argLongForm,
+                    unsigned const instance,
+                    char const **const value);
 
-Result getOptionInstancePosition(ArgParserT const *const handle,
-                                 std::string const &argLongForm,
-                                 std::size_t const instanceIndex,
-                                 std::size_t *const position);
+bool getFreeValueCount(ArgParser const *const handle, unsigned *const count);
 
-Result getOptionInstanceValue(ArgParserT const *const handle,
-                              std::string const &argLongForm,
-                              std::size_t const instanceIndex,
-                              std::string *const value);
+bool getFreeValuePosition(ArgParser const *const handle,
+                          unsigned const instance,
+                          unsigned *const position);
 
-Result getFreeValueCount(ArgParserT const *const handle,
-                         std::size_t *const count);
-
-Result getFreeValueInstancePosition(ArgParserT const *const handle,
-                                    std::size_t const instanceIndex,
-                                    std::size_t *const position);
-
-Result getFreeValueInstance(ArgParserT const *const handle,
-                            std::size_t const instanceIndex,
-                            std::string *const value);
+bool getFreeValue(ArgParser const *const handle,
+                  unsigned const instance,
+                  char const **const value);
 } // namespace ap

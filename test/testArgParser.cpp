@@ -24,6 +24,23 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <ranges>
 #include <vector>
 
+using SmartArgParser =
+    std::unique_ptr<ap::ArgParser, void (*)(ap::ArgParser const *const)>;
+
+SmartArgParser createSmartArgParser() {
+  ap::ArgParser *parser{};
+  ap::createArgParser(&parser);
+  return SmartArgParser{parser, ap::destroyArgParser};
+}
+
+void printErrorMessage(ap::ArgParser const *const parser) {
+  char const *errorString{};
+  ap::getErrorMessage(parser, &errorString);
+  if (!errorString)
+    return;
+  std::cerr << "ERROR: " << errorString << std::endl;
+}
+
 int main(int const argc, char const *const *const argv) {
   if (argc < 4) {
     std::cerr << "The number of arguments is too small." << std::endl;
@@ -46,7 +63,7 @@ int main(int const argc, char const *const *const argv) {
   while (std::getline(opts, line))
     odef.push_back(line);
 
-  auto parser = ap::createArgParser();
+  auto parser = createSmartArgParser();
   auto handle = parser.get();
 
   if (!handle) {
@@ -69,43 +86,32 @@ int main(int const argc, char const *const *const argv) {
     }
     if (keyVal.empty() || keyVal[0].empty()) {
       std::cerr << "At least a long form must be provided." << std::endl;
-      return ap::Result::ErrorArgLongFormNotValid;
+      return false;
     }
 
     bool const shV = keyVal.size() == 2 && keyVal[1][0] != 0;
-    return f(parser.get(), keyVal[0], shV ? keyVal[1][0] : 0);
+    return f(parser.get(), keyVal[0].c_str(), shV ? keyVal[1][0] : 0);
   };
 
   std::size_t const offset = 3;
 
   for (auto const &a : fdef) {
-    if (auto r = splitAndRegister(a, ap::addFlag); r != ap::Result::Success) {
-      std::string code{};
-      ap::toString(r, &code);
-      std::cerr << "Failed to add flag with error: " << code << std::endl;
+    if (!splitAndRegister(a, ap::addFlag)) {
+      std::cerr << "Failed to add flag" << std::endl;
       return 4;
     }
   }
 
   for (auto const &a : odef) {
-    if (auto r = splitAndRegister(a, ap::addOption); r != ap::Result::Success) {
-      std::string code{};
-      ap::toString(r, &code);
-      std::cerr << "Failed to add option with error: " << code << std::endl;
+    if (!splitAndRegister(a, ap::addOption)) {
+      std::cerr << "Failed to add option" << std::endl;
       return 4;
     }
   }
 
   auto result = ap::parse(handle, argv, offset, argc);
-  if (result != ap::Result::Success) {
-    std::size_t errPos{};
-    ap::getErrorPosition(handle, &errPos);
-    std::string error{};
-    ap::toString(result, &error);
-
-    std::cerr << "Parsing failed at position " << errPos;
-    std::cerr << ": '" << argv[errPos + offset] << "', with error: ";
-    std::cerr << error << "." << std::endl;
+  if (!result) {
+    printErrorMessage(handle);
     return 5;
   }
 

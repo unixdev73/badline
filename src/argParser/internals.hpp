@@ -20,7 +20,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <badline/argParser.hpp>
 #include <unordered_map>
 #include <functional>
 #include <string>
@@ -29,28 +28,27 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <memory>
 
 namespace ap {
-enum class ModeT { Strict, Lenient };
+enum class Mode { Strict, Lenient };
 
-enum class StateT {
+enum class State {
   ParseInputToken,
   HandleOptionValue,
   HandleOptionRogueValue,
   HandleRogueFreeValue
 };
 
-struct ArgInstanceInfoT {
+struct ArgInstanceInfo {
   std::size_t position{};
   std::string value{};
 };
 
-struct ArgInstanceDatabaseT {
-  std::unordered_map<std::string,
-                     std::unique_ptr<std::vector<ArgInstanceInfoT>>>
+struct ArgInstanceDatabase {
+  std::unordered_map<std::string, std::unique_ptr<std::vector<ArgInstanceInfo>>>
       longForm{};
-  std::unordered_map<char, std::vector<ArgInstanceInfoT> *> shortForm{};
+  std::unordered_map<char, std::vector<ArgInstanceInfo> *> shortForm{};
 };
 
-struct GrammarRuleT {
+struct GrammarRule {
   enum Identifier : std::size_t {
     // TERMS
     ShortArgPrefix,
@@ -87,10 +85,10 @@ struct GrammarRuleT {
     Size
   };
 
-  static Result toString(std::size_t const id, std::string *const output);
+  static bool toString(std::size_t const id, std::string *const output);
 };
 
-struct GrammarRuleVariantT {
+struct GrammarRuleVariant {
   std::size_t nonTermA{}, nonTermB{};
   std::function<void(std::string const &,
                      std::size_t const beginA,
@@ -100,28 +98,28 @@ struct GrammarRuleVariantT {
       semanticAction{};
 };
 
-struct RuleInfoT {
+struct RuleInfo {
   std::size_t identifier;
   std::size_t locationY;
   std::size_t begin, end;
 
-  bool operator==(RuleInfoT const &o) const {
+  bool operator==(RuleInfo const &o) const {
     return identifier == o.identifier && locationY == o.locationY &&
            begin == o.begin && end == o.end;
   }
 };
 
-struct BackPtrT {
+struct BackPtr {
   std::size_t variant;
-  RuleInfoT ruleLHS;
-  RuleInfoT ruleRHS;
+  RuleInfo ruleLHS;
+  RuleInfo ruleRHS;
 
-  bool operator==(BackPtrT const &o) const {
+  bool operator==(BackPtr const &o) const {
     return variant == o.variant && ruleLHS == o.ruleLHS && ruleRHS == o.ruleRHS;
   }
 };
 
-struct TokenInfoT {
+struct TokenInfo {
   std::string argName{};
   std::string argExt{};
   std::string argVal{};
@@ -129,66 +127,69 @@ struct TokenInfoT {
   bool isFreeVal{};
 };
 
-struct ParsingDatabaseT {
+struct ParsingDatabase {
   using NonTermId = std::size_t;
   using TermId = char;
-  using TermPairT = std::pair<std::vector<NonTermId>, std::vector<TermId>>;
-  std::vector<TermPairT> termMapping{};
+  using TermPair = std::pair<std::vector<NonTermId>, std::vector<TermId>>;
+  std::vector<TermPair> termMapping{};
 
-  using GrammarRuleT = std::vector<GrammarRuleVariantT>;
-  std::vector<GrammarRuleT> grammar{};
+  using GrammarRule = std::vector<GrammarRuleVariant>;
+  std::vector<GrammarRule> grammar{};
   NonTermId startSymbol{};
 
-  using ParseChartT = std::vector<std::vector<std::vector<bool>>>;
-  ParseChartT chart{};
+  using ParseChart = std::vector<std::vector<std::vector<bool>>>;
+  ParseChart chart{};
 
-  using RuleVariationsT = std::vector<BackPtrT>;
-  using BackChartT = std::vector<std::vector<std::vector<RuleVariationsT>>>;
-  BackChartT back{};
+  using RuleVariations = std::vector<BackPtr>;
+  using BackChart = std::vector<std::vector<std::vector<RuleVariations>>>;
+  BackChart back{};
 
-  using RuleDescT = std::pair<NonTermId, BackPtrT>;
-  std::list<RuleDescT> serialized{};
+  using RuleDesc = std::pair<NonTermId, BackPtr>;
+  std::list<RuleDesc> serialized{};
 
-  TokenInfoT tokenInfo{};
+  TokenInfo tokenInfo{};
 };
 
-struct ArgParserT {
-  std::vector<ArgInstanceInfoT> freeValues{};
-  ArgInstanceDatabaseT options{};
-  ArgInstanceDatabaseT flags{};
+struct ArgParser {
+  std::vector<ArgInstanceInfo> freeValues{};
+  ArgInstanceDatabase options{};
+  ArgInstanceDatabase flags{};
 
-  ParsingDatabaseT database{};
-  StateT currentState{};
-  ModeT mode{};
+  ParsingDatabase database{};
+  State currentState{};
+  Mode mode{};
 
-  std::vector<ArgInstanceInfoT> *targetOption{};
+  std::vector<ArgInstanceInfo> *targetOption{};
   std::size_t errorPosition{};
+  mutable std::string errorMessage{"OK"};
+  bool databaseFilled{false};
 };
 } // namespace ap
 
 namespace ap {
-Result updateArguments(ArgParserT *const handle,
-                       std::string const *const token,
-                       std::size_t const position);
+inline void setErrMsg(ArgParser const *const handle, std::string message) {
+  handle->errorMessage = std::move(message);
+}
 
-Result tracePostorderPath(ParsingDatabaseT *const database,
-                          std::size_t const variant);
+bool updateArguments(ArgParser *const handle,
+                     std::string const *const token,
+                     std::size_t const position);
 
-Result initParseChart(ParsingDatabaseT *const database,
-                      std::string const *const input);
+bool tracePostorderPath(ParsingDatabase *const database,
+                        std::size_t const variant);
 
-Result parseCYK(ParsingDatabaseT *const database,
-                std::string const *const input);
+bool initParseChart(ArgParser *const database, std::string const *const input);
 
-Result handleState(ArgParserT *const handle,
-                   std::string const *const token,
-                   std::size_t const position,
-                   bool * const skip);
+bool parseCYK(ArgParser *const database, std::string const *const input);
 
-Result fillParsingDatabaseWithAlphabet(ParsingDatabaseT *const database);
-Result fillParsingDatabaseWithDigits(ParsingDatabaseT *const database);
-Result fillParsingDatabaseWithMisc(ParsingDatabaseT *const database);
-Result fillParsingDatabase(ParsingDatabaseT *const database);
+bool handleState(ArgParser *const handle,
+                 std::string const *const token,
+                 std::size_t const position,
+                 bool *const skip);
 
-Result checkThatAllOptionsAreAssigned(ArgParserT const *const handle);
+bool fillParsingDatabaseWithAlphabet(ParsingDatabase *const database);
+bool fillParsingDatabaseWithDigits(ParsingDatabase *const database);
+bool fillParsingDatabaseWithMisc(ParsingDatabase *const database);
+bool fillParsingDatabase(ParsingDatabase *const database);
+bool areOptionsAssigned(ArgParser const *const handle);
 } // namespace ap

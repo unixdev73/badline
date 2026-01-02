@@ -22,147 +22,122 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include "internals.hpp"
 
 namespace ap {
-Result toString(Result const result, std::string *const output) {
-  switch (result) {
-  case Result::Success:
-    *output = "Success";
-    break;
-  case Result::ErrorNullptrHandle:
-    *output = "ErrorNullptrHandle";
-    break;
-  case Result::ErrorNullptrInput:
-    *output = "ErrorNullptrInput";
-    break;
-  case Result::ErrorNullptrCount:
-    *output = "ErrorNullptrCount";
-    break;
-  case Result::ErrorNullptrPosition:
-    *output = "ErrorNullptrPosition";
-    break;
-  case Result::ErrorNullptrValue:
-    *output = "ErrorNullptrValue";
-    break;
-  case Result::ErrorNullptrOutput:
-    *output = "ErrorNullptrOutput";
-    break;
-  case Result::ErrorArgLongFormNotUnique:
-    *output = "ErrorArgLongFormNotUnique";
-    break;
-  case Result::ErrorArgShortFormNotUnique:
-    *output = "ErrorArgShortFormNotUnique";
-    break;
-  case Result::ErrorArgLongFormNotValid:
-    *output = "ErrorArgLongFormNotValid";
-    break;
-  case Result::ErrorArgShortFormNotValid:
-    *output = "ErrorArgShortFormNotValid";
-    break;
-  case Result::ErrorBeginEndRangeNotValid:
-    *output = "ErrorBeginEndRangeNotValid";
-    break;
-  case Result::ErrorInstanceIndexNotValid:
-    *output = "ErrorInstanceIndexNotValid";
-    break;
-  case Result::ErrorTermTokenNotValid:
-    *output = "ErrorTermTokenNotValid";
-    break;
-  case Result::ErrorMemoryAllocationFailure:
-    *output = "ErrorMemoryAllocationFailure";
-    break;
-  case Result::ErrorStartSymbolNotDerivedFromInput:
-    *output = "ErrorStartSymbolNotDerivedFromInput";
-    break;
-  case Result::ErrorExpectedArgListToken:
-    *output = "ErrorExpectedArgListToken";
-    break;
-  case Result::ErrorOptionRequiresValue:
-    *output = "ErrorOptionRequiresValue";
-    break;
-  case Result::ErrorInputTokenNotValid:
-    *output = "ErrorInputTokenNotValid";
-    break;
-  case Result::ErrorRuleIdentifierNotValid:
-    *output = "ErrorRuleIdentifierNotValid";
-    break;
+void createArgParser(ArgParser **const handle) {
+  if (handle)
+    *handle = new ArgParser{};
+}
+
+void destroyArgParser(ArgParser const *const handle) { delete handle; }
+
+bool addFlag(ArgParser *const handle,
+             char const *const argLongFormPtr,
+             char const argShortForm) {
+  if (!handle)
+    return false;
+
+  if (!argLongFormPtr) {
+    setErrMsg(handle, "addFlag: The argument long form is a nullptr");
+    return false;
   }
 
-  return Result::Success;
-}
+  std::string const argLongForm{argLongFormPtr};
 
-Result createArgParser(ArgParserT **const handle) {
-  if (!handle)
-    return Result::ErrorNullptrHandle;
+  if (argLongForm.empty()) {
+    setErrMsg(handle, "addFlag: The argument long form is empty");
+    return false;
+  }
 
-  if (auto parser = new ArgParserT{}; parser) {
-    if (auto r = fillParsingDatabase(&parser->database); r != Result::Success)
-      return r;
-    *handle = parser;
-  } else
-    return Result::ErrorMemoryAllocationFailure;
+  if (handle->flags.longForm.contains(argLongForm)) {
+    setErrMsg(handle,
+              "addFlag: The argument long form: " + argLongForm +
+                  " is alread in use");
+    return false;
+  }
 
-  return Result::Success;
-}
-
-void destroyArgParser(ArgParserT const *const handle) { delete handle; }
-
-UniqueArgParser createArgParser() {
-  ArgParserT *handle{};
-  createArgParser(&handle);
-  return {handle, destroyArgParser};
-}
-
-Result addFlag(ArgParserT *const handle,
-               std::string const &argLongForm,
-               char const argShortForm) {
-  if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (argLongForm.empty())
-    return Result::ErrorArgLongFormNotValid;
-  if (handle->flags.longForm.contains(argLongForm))
-    return Result::ErrorArgLongFormNotUnique;
-  if (argShortForm && handle->flags.shortForm.contains(argShortForm))
-    return Result::ErrorArgShortFormNotUnique;
+  if (argShortForm && handle->flags.shortForm.contains(argShortForm)) {
+    auto msg = std::string{"addFlag: The argument short form: "} + argShortForm;
+    setErrMsg(handle, msg + " is alread in use");
+    return false;
+  }
 
   auto &shortFormDB = handle->flags.shortForm;
   auto &longFormDB = handle->flags.longForm;
   longFormDB.emplace(argLongForm,
-                     std::make_unique<std::vector<ArgInstanceInfoT>>());
+                     std::make_unique<std::vector<ArgInstanceInfo>>());
   if (argShortForm)
     shortFormDB.emplace(argShortForm, longFormDB.at(argLongForm).get());
-  return Result::Success;
+  return true;
 }
 
-Result addOption(ArgParserT *const handle,
-                 std::string const &argLongForm,
-                 char const argShortForm) {
+bool addOption(ArgParser *const handle,
+               char const *const argLongFormPtr,
+               char const argShortForm) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (argLongForm.empty())
-    return Result::ErrorArgLongFormNotValid;
-  if (handle->options.longForm.contains(argLongForm))
-    return Result::ErrorArgLongFormNotUnique;
-  if (argShortForm && handle->options.shortForm.contains(argShortForm))
-    return Result::ErrorArgShortFormNotUnique;
+    return false;
+
+  if (!argLongFormPtr) {
+    setErrMsg(handle, "addOption: The argument long form is a nullptr");
+    return false;
+  }
+
+  std::string const argLongForm{argLongFormPtr};
+
+  if (argLongForm.empty()) {
+    setErrMsg(handle, "addOption: The argument long form is empty");
+    return false;
+  }
+
+  if (handle->options.longForm.contains(argLongForm)) {
+    setErrMsg(handle,
+              "addOption: The argument long form: " + argLongForm +
+                  " is alread in use");
+    return false;
+  }
+
+  if (argShortForm && handle->options.shortForm.contains(argShortForm)) {
+    auto m = std::string{"addOption: The argument short form: "} + argShortForm;
+    setErrMsg(handle, m + " is alread in use");
+    return false;
+  }
 
   auto &shortFormDB = handle->options.shortForm;
   auto &longFormDB = handle->options.longForm;
   longFormDB.emplace(argLongForm,
-                     std::make_unique<std::vector<ArgInstanceInfoT>>());
+                     std::make_unique<std::vector<ArgInstanceInfo>>());
   if (argShortForm)
     shortFormDB.emplace(argShortForm, longFormDB.at(argLongForm).get());
-  return Result::Success;
+  return true;
 }
 
-Result parse(ArgParserT *const handle,
-             char const *const *const input,
-             std::size_t const begin,
-             std::size_t const end) {
+void getErrorMessage(ArgParser const *const handle, char const **const output) {
+  if (handle)
+    *output = handle->errorMessage.c_str();
+}
+
+bool parse(ArgParser *const handle,
+           char const *const *const input,
+           unsigned const begin,
+           unsigned const end) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (!input)
-    return Result::ErrorNullptrInput;
-  if (begin >= end)
-    return Result::ErrorBeginEndRangeNotValid;
+    return false;
+
+  if (!input) {
+    setErrMsg(handle, "parse: The input handle is a nullptr");
+    return false;
+  }
+
+  if (begin >= end) {
+    setErrMsg(handle, "parse: The begin range parameter >= end");
+    return false;
+  }
+
+  if (!handle->databaseFilled) {
+    if (!fillParsingDatabase(&handle->database)) {
+      setErrMsg(handle, "parse: Failed to fill parsing database");
+      return false;
+    }
+    handle->databaseFilled = true;
+  }
 
   for (std::size_t i = begin; i < end; ++i) {
     handle->database.back.clear();
@@ -173,159 +148,260 @@ Result parse(ArgParserT *const handle,
     std::size_t const pos = i - begin;
     bool skip = false;
 
-    if (auto r = handleState(handle, &token, pos, &skip); r != Result::Success)
-      return r;
+    if (!handleState(handle, &token, pos, &skip))
+      return false;
     if (skip)
       continue;
 
-    if (auto r = parseCYK(&handle->database, &token); r != Result::Success)
-      return r;
-    if (auto r = tracePostorderPath(&handle->database, 0); r != Result::Success)
-      return r;
-    if (auto r = updateArguments(handle, &token, pos); r != Result::Success)
-      return r;
+    if (!parseCYK(handle, &token))
+      return false;
+    if (!tracePostorderPath(&handle->database, 0))
+      return false;
+    if (!updateArguments(handle, &token, pos))
+      return false;
   }
 
-  return checkThatAllOptionsAreAssigned(handle);
+  return areOptionsAssigned(handle);
 }
 
-Result getErrorPosition(ArgParserT *const handle, std::size_t *const output) {
+bool getFlagCount(ArgParser const *const handle,
+                  char const *const argLongFormPtr,
+                  unsigned *const count) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (!output)
-    return Result::ErrorNullptrOutput;
-  *output = handle->errorPosition;
-  return Result::Success;
-}
+    return false;
 
-Result getFlagCount(ArgParserT const *const handle,
-                    std::string const &argLongForm,
-                    std::size_t *const count) {
-  if (!handle)
-    return Result::ErrorNullptrHandle;
+  if (!argLongFormPtr) {
+    setErrMsg(handle, "getFlagCount: The argument long form is a nullptr");
+    return false;
+  }
 
-  if (!count)
-    return Result::ErrorNullptrCount;
+  std::string const argLongForm{argLongFormPtr};
+
+  if (argLongForm.empty()) {
+    setErrMsg(handle, "getFlagCount: The argument long form is empty");
+    return false;
+  }
+
+  if (!count) {
+    setErrMsg(handle, "getFlagCount: The output parameter 'count' = nullptr");
+    return false;
+  }
 
   if (handle->flags.longForm.contains(argLongForm))
     *count = handle->flags.longForm.at(argLongForm)->size();
   else
     *count = 0;
 
-  return Result::Success;
+  return true;
 }
 
-Result getFlagInstancePosition(ArgParserT const *const handle,
-                               std::string const &argLongForm,
-                               std::size_t const instanceIndex,
-                               std::size_t *const position) {
+bool getFlagPosition(ArgParser const *const handle,
+                     char const *const argLongFormPtr,
+                     std::size_t const instance,
+                     std::size_t *const position) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (!position)
-    return Result::ErrorNullptrPosition;
-  if (!handle->flags.longForm.contains(argLongForm))
-    return Result::ErrorArgLongFormNotValid;
+    return false;
+
+  if (!argLongFormPtr) {
+    setErrMsg(handle, "getFlagPosition: The argument long form is a nullptr");
+    return false;
+  }
+
+  std::string const argLongForm{argLongFormPtr};
+
+  if (argLongForm.empty()) {
+    setErrMsg(handle, "getFlagPosition: The argument long form is empty");
+    return false;
+  }
+
+  if (!position) {
+    setErrMsg(handle, "getFlagPosition: The argument 'position' is a nullptr");
+    return false;
+  }
+
+  if (!handle->flags.longForm.contains(argLongForm)) {
+    setErrMsg(handle,
+              "getFlagPosition: The argument long form" + argLongForm +
+                  " is not valid");
+    return false;
+  }
 
   auto const &instances = handle->flags.longForm.at(argLongForm);
-  if (instanceIndex >= instances->size())
-    return Result::ErrorInstanceIndexNotValid;
+  if (instance >= instances->size()) {
+    setErrMsg(handle, "getFlagPosition: The argument 'instance' is not valid");
+    return false;
+  }
 
-  *position = instances->at(instanceIndex).position;
-  return Result::Success;
+  *position = instances->at(instance).position;
+  return true;
 }
 
-Result getOptionCount(ArgParserT const *const handle,
-                      std::string const &argLongForm,
-                      std::size_t *const count) {
+bool getOptionCount(ArgParser const *const handle,
+                    char const *const argLongFormPtr,
+                    unsigned *const count) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
+    return false;
 
-  if (!count)
-    return Result::ErrorNullptrCount;
+  if (!argLongFormPtr) {
+    setErrMsg(handle, "getOptionCount: The argument long form is a nullptr");
+    return false;
+  }
+
+  std::string const argLongForm{argLongFormPtr};
+
+  if (argLongForm.empty()) {
+    setErrMsg(handle, "getOptionCount: The argument long form is empty");
+    return false;
+  }
+
+  if (!count) {
+    setErrMsg(handle, "getOptionCount: The output parameter 'count' = nullptr");
+    return false;
+  }
 
   if (handle->options.longForm.contains(argLongForm))
     *count = handle->options.longForm.at(argLongForm)->size();
   else
     *count = 0;
 
-  return Result::Success;
+  return true;
 }
 
-Result getOptionInstancePosition(ArgParserT const *const handle,
-                                 std::string const &argLongForm,
-                                 std::size_t const instanceIndex,
-                                 std::size_t *const position) {
+bool getOptionPosition(ArgParser const *const handle,
+                       char const *const argLongFormPtr,
+                       unsigned const instance,
+                       unsigned *const position) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (!position)
-    return Result::ErrorNullptrPosition;
-  if (!handle->options.longForm.contains(argLongForm))
-    return Result::ErrorArgLongFormNotValid;
+    return false;
+
+  if (!argLongFormPtr) {
+    setErrMsg(handle, "getOptionPosition: The argument long form is a nullptr");
+    return false;
+  }
+
+  std::string const argLongForm{argLongFormPtr};
+
+  if (argLongForm.empty()) {
+    setErrMsg(handle, "getOptionPosition: The argument long form is empty");
+    return false;
+  }
+
+  if (!position) {
+    setErrMsg(handle, "getOptionPosition: The output parameter 'position' = 0");
+    return false;
+  }
+
+  if (!handle->options.longForm.contains(argLongForm)) {
+    setErrMsg(handle,
+              "getOptionPosition: The argument long form" + argLongForm +
+                  " is not valid");
+    return false;
+  }
 
   auto const &instances = handle->options.longForm.at(argLongForm);
-  if (instanceIndex >= instances->size())
-    return Result::ErrorInstanceIndexNotValid;
+  if (instance >= instances->size()) {
+    setErrMsg(handle,
+              "getOptionPosition: The argument 'instance' is not valid");
+    return false;
+  }
 
-  *position = instances->at(instanceIndex).position;
-  return Result::Success;
+  *position = instances->at(instance).position;
+  return true;
 }
 
-Result getOptionInstanceValue(ArgParserT const *const handle,
-                              std::string const &argLongForm,
-                              std::size_t const instanceIndex,
-                              std::string *const value) {
+bool getOptionValue(ArgParser const *const handle,
+                    char const *const argLongFormPtr,
+                    unsigned const instance,
+                    char const **const value) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (!value)
-    return Result::ErrorNullptrValue;
-  if (!handle->options.longForm.contains(argLongForm))
-    return Result::ErrorArgLongFormNotValid;
+    return false;
+
+  if (!value) {
+    setErrMsg(handle, "getOptionValue: The argument 'value' is a nullptr");
+    return false;
+  }
+
+  if (!argLongFormPtr) {
+    setErrMsg(handle, "getOptionValue: The argument long form is a nullptr");
+    return false;
+  }
+
+  std::string const argLongForm{argLongFormPtr};
+
+  if (argLongForm.empty()) {
+    setErrMsg(handle, "getOptionValue: The argument long form is empty");
+    return false;
+  }
+
+  if (!handle->options.longForm.contains(argLongForm)) {
+    setErrMsg(handle,
+              "getOptionValue: The argument long form" + argLongForm +
+                  " is not valid");
+    return false;
+  }
 
   auto const &instances = handle->options.longForm.at(argLongForm);
-  if (instanceIndex >= instances->size())
-    return Result::ErrorInstanceIndexNotValid;
+  if (instance >= instances->size()) {
+    setErrMsg(handle, "getOptionValue: The argument 'instance' is not valid");
+    return false;
+  }
 
-  *value = instances->at(instanceIndex).value;
-  return Result::Success;
+  *value = instances->at(instance).value.c_str();
+  return true;
 }
 
-Result getFreeValueCount(ArgParserT const *const handle,
-                         std::size_t *const count) {
+bool getFreeValueCount(ArgParser const *const handle, unsigned *const count) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
+    return false;
 
-  if (!count)
-    return Result::ErrorNullptrCount;
+  if (!count) {
+    setErrMsg(handle, "getFreeValueCount: The argument 'count' = nullptr");
+    return false;
+  }
 
   *count = handle->freeValues.size();
-  return Result::Success;
+  return true;
 }
 
-Result getFreeValueInstancePosition(ArgParserT const *const handle,
-                                    std::size_t const instanceIndex,
-                                    std::size_t *const position) {
+bool getFreeValuePosition(ArgParser const *const handle,
+                          unsigned const instance,
+                          unsigned *const position) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (!position)
-    return Result::ErrorNullptrPosition;
-  if (instanceIndex >= handle->freeValues.size())
-    return Result::ErrorInstanceIndexNotValid;
+    return false;
 
-  *position = handle->freeValues.at(instanceIndex).position;
-  return Result::Success;
+  if (!position) {
+    setErrMsg(handle,
+              "getFreeValuePosition: The argument 'position' = nullptr");
+    return false;
+  }
+
+  if (instance >= handle->freeValues.size()) {
+    setErrMsg(handle,
+              "getFreeValuePosition: The argument 'instance' is not valid");
+    return false;
+  }
+
+  *position = handle->freeValues.at(instance).position;
+  return true;
 }
 
-Result getFreeValueInstance(ArgParserT const *const handle,
-                            std::size_t const instanceIndex,
-                            std::string *const value) {
+bool getFreeValue(ArgParser const *const handle,
+                  unsigned const instance,
+                  char const **const value) {
   if (!handle)
-    return Result::ErrorNullptrHandle;
-  if (!value)
-    return Result::ErrorNullptrValue;
-  if (instanceIndex >= handle->freeValues.size())
-    return Result::ErrorInstanceIndexNotValid;
+    return false;
 
-  *value = handle->freeValues.at(instanceIndex).value;
-  return Result::Success;
+  if (!value) {
+    setErrMsg(handle, "getFreeValue: The argument 'value' = nullptr");
+    return false;
+  }
+
+  if (instance >= handle->freeValues.size()) {
+    setErrMsg(handle, "getFreeValue: The argument 'instance' is not valid");
+    return false;
+  }
+
+  *value = handle->freeValues.at(instance).value.c_str();
+  return true;
 }
 } // namespace ap

@@ -23,6 +23,23 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <ranges>
 #include <vector>
 
+using SmartArgParser =
+    std::unique_ptr<ap::ArgParser, void (*)(ap::ArgParser const *const)>;
+
+SmartArgParser createSmartArgParser() {
+  ap::ArgParser *parser{};
+  ap::createArgParser(&parser);
+  return SmartArgParser{parser, ap::destroyArgParser};
+}
+
+void printErrorMessage(ap::ArgParser const *const parser) {
+  char const *errorString{};
+  ap::getErrorMessage(parser, &errorString);
+  if (!errorString)
+    return;
+  std::cerr << "ERROR: " << errorString << std::endl;
+}
+
 using ap::addOption;
 
 int main(int const argc, char const *const *const argv) {
@@ -31,7 +48,7 @@ int main(int const argc, char const *const *const argv) {
     return 1;
   }
 
-  auto parser = ap::createArgParser();
+  auto parser = createSmartArgParser();
   auto handle = parser.get();
 
   if (!handle) {
@@ -56,26 +73,17 @@ int main(int const argc, char const *const *const argv) {
     }
 
     bool const shV = keyVal.size() == 2 && keyVal[1][0] != 0;
-    auto result = addOption(parser.get(), keyVal[0], shV ? keyVal[1][0] : 0);
-    if (result != ap::Result::Success) {
-      std::string code{};
-      ap::toString(result, &code);
-      std::cerr << "Failed to add argument: " << keyVal[0] << " with error: ";
-      std::cerr << code << std::endl;
+    auto result =
+        addOption(parser.get(), keyVal[0].c_str(), shV ? keyVal[1][0] : 0);
+    if (!result) {
+      printErrorMessage(handle);
       return 4;
     }
   }
 
   auto result = ap::parse(handle, argv, offset, argc);
-  if (result != ap::Result::Success) {
-    std::size_t errPos{};
-    ap::getErrorPosition(handle, &errPos);
-    std::string error{};
-    ap::toString(result, &error);
-
-    std::cerr << "Parsing failed at position " << errPos;
-    std::cerr << ": '" << argv[errPos + offset] << "', with error: ";
-    std::cerr << error << "." << std::endl;
+  if (!result) {
+    printErrorMessage(handle);
     return 5;
   }
 

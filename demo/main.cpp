@@ -29,12 +29,13 @@ int main(int const argc, char const *const *const argv) {
   try {
     demo::App a{.argc = std::size_t(argc), .argv = argv};
 
-    if (demo::initialize(&a)) {
+    if (!demo::initialize(&a)) {
       std::cerr << "Failed to initialize demo" << std::endl;
       return 1;
     }
 
-    return demo::run(&a);
+    if (demo::run(&a))
+      return 0;
 
   } catch (std::exception const &e) {
     std::cerr << "Error: Caught exception: " << e.what() << std::endl;
@@ -44,7 +45,15 @@ int main(int const argc, char const *const *const argv) {
 }
 
 namespace demo {
-int createScene(App *const a) {
+void printErrorMessage(ap::ArgParser const *const parser) {
+  char const *errorString{};
+  ap::getErrorMessage(parser, &errorString);
+  if (!errorString)
+    return;
+  std::cerr << "ERROR: " << errorString << std::endl;
+}
+
+bool createScene(App *const a) {
   std::vector<re::Vertex> vertices = {
       {{-1.000000, 1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
       {{-1.000000, -1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
@@ -68,13 +77,13 @@ int createScene(App *const a) {
   if (auto r = re::setVertices(a->engine.get(), &vertices);
       r != re::Result::Success) {
     std::cerr << "Failed to set vertices. " << std::endl;
-    return 1;
+    return false;
   }
 
   if (auto r = re::setIndices(a->engine.get(), &indices);
       r != re::Result::Success) {
     std::cerr << "Failed to set indices. " << std::endl;
-    return 1;
+    return false;
   }
 
   auto &instances = a->instances;
@@ -91,12 +100,13 @@ int createScene(App *const a) {
   if (auto r = re::setInstances(a->engine.get(), &instances, instances.size());
       r != re::Result::Success) {
     std::cerr << "Failed to set instances. " << std::endl;
-    return 1;
+    return false;
   }
-  return 0;
+
+  return true;
 }
 
-int update(App *const a) {
+bool update(App *const a) {
   auto &instances = a->instances;
   auto &proj = a->proj;
   auto &view = a->view;
@@ -125,7 +135,7 @@ int update(App *const a) {
   if (auto r = re::setInstances(a->engine.get(), &instances);
       r != re::Result::Success) {
     std::cerr << "Failed to set instances. " << std::endl;
-    return 1;
+    return false;
   }
 
   auto const aspect = float(a->windowWidth) / float(a->windowHeight);
@@ -133,31 +143,40 @@ int update(App *const a) {
   view = view * rotY;
   re::setProjection(a->engine.get(), proj);
   re::setView(a->engine.get(), view);
-  return 0;
+
+  return true;
 }
 
-int run(App *const a) {
-  if (createScene(a)) {
+bool run(App *const a) {
+  if (!createScene(a)) {
     std::cerr << "Creating scene failed" << std::endl;
-    return 1;
+    return false;
   }
 
   auto const engine = a->engine.get();
   bool windowOpen = true;
   re::isWindowOpen(engine, &windowOpen);
 
+  constexpr auto frameMinTime = std::chrono::milliseconds(17);
+  auto timeStamp = std::chrono::steady_clock::now();
+
   while (windowOpen) {
     glfwPollEvents();
 
-    if (update(a)) {
-      std::cerr << "Update failed" << std::endl;
-      return 1;
-    }
+    if (auto now = std::chrono::steady_clock::now();
+        now - timeStamp > frameMinTime) {
+      if (!update(a)) {
+        std::cerr << "Update failed" << std::endl;
+        return false;
+      }
 
-    auto r = re::render(engine);
-    if (r != re::Result::Success) {
-      std::cerr << "Rendering failed" << std::endl;
-      return 1;
+      auto r = re::render(engine);
+      if (r != re::Result::Success) {
+        std::cerr << "Rendering failed" << std::endl;
+        return false;
+      }
+
+      timeStamp = now;
     }
 
     bool keyPressed = false;
@@ -168,122 +187,133 @@ int run(App *const a) {
     re::isWindowOpen(engine, &windowOpen);
   }
 
-  return 0;
+  return true;
 }
 
-int initialize(App *const a) {
+bool initialize(App *const a) {
   namespace fs = std::filesystem;
   fs::current_path(fs::canonical(fs::path{a->argv[0]}.parent_path()));
 
-  if (a->argc > 1 && initializeArgParser(a))
-    return 1;
+  if (a->argc > 1 && !initializeArgParser(a))
+    return false;
 
   a->engine = re::createRenderEngine("Demo", true);
   if (!a->engine) {
     std::cerr << "Failed to create render engine" << std::endl;
-    return 1;
+    return false;
   }
 
-  if (openWindow(a)) {
+  if (!openWindow(a)) {
     std::cerr << "Failed to open window" << std::endl;
-    return 1;
+    return false;
   }
 
-  return 0;
+  return true;
 }
 
-int initializeArgParser(App *const a) {
-  a->parser = ap::createArgParser();
-  if (!a->parser) {
+SmartArgParser createSmartArgParser() {
+  ap::ArgParser *parser{};
+  ap::createArgParser(&parser);
+  return SmartArgParser{parser, ap::destroyArgParser};
+}
+
+bool initializeArgParser(App *const a) {
+  a->parser = createSmartArgParser();
+  auto const p = a->parser.get();
+
+  if (!p) {
     std::cerr << "Failed to create arg parser" << std::endl;
-    return 1;
+    return false;
   }
 
-  ap::addOption(a->parser.get(), "width", 'w');
-  ap::addOption(a->parser.get(), "height", 'h');
-
-  auto result = ap::parse(a->parser.get(), a->argv, 1, a->argc);
-  if (result != ap::Result::Success) {
-    std::size_t pos{};
-    ap::getErrorPosition(a->parser.get(), &pos);
-    std::string err = a->argv[pos + 1];
-    std::string errType{};
-    ap::toString(result, &errType);
-    std::cerr << "Argument parsing failed with error code: " << errType
-              << "\nProblematic token";
-    std::cerr << " at position " << pos << ": '" << err << "'" << std::endl;
-    return 1;
+  if (!ap::addOption(p, "width", 'w')) {
+    printErrorMessage(p);
+    return false;
   }
 
-  return 0;
+  if (!ap::addOption(p, "height", 'h')) {
+    printErrorMessage(p);
+    return false;
+  }
+
+  if (!ap::parse(p, a->argv, 1, a->argc)) {
+    printErrorMessage(p);
+    return false;
+  }
+
+  return true;
 }
 
-int convertToNumber(std::string const &input, long long *const output) {
+bool convertToNumber(std::string const &input, long long *const output) {
   if (input.size()) {
     try {
       *output = std::stoll(input);
     } catch (...) {
       std::cerr << "Converting: '" << input << "' to a number failed\n";
-      return 1;
+      return false;
     }
   } else
     *output = 0;
-  return 0;
+  return true;
 }
 
-int convertWindowArgs(std::vector<std::string> *const vals,
-                      uint32_t *const w,
-                      uint32_t *const h) {
+bool convertWindowArgs(std::vector<std::string> *const vals,
+                       uint32_t *const w,
+                       uint32_t *const h) {
   auto getSize = [&vals](std::size_t const i, uint32_t *const output) {
     long long out{};
-    if (convertToNumber(vals->at(i), &out))
-      return 1;
+    if (!convertToNumber(vals->at(i), &out))
+      return false;
     if (out)
       *output = out;
-    return 0;
+    return true;
   };
 
-  if (getSize(0, w)) {
+  if (!getSize(0, w)) {
     std::cerr << "Failed to set window width" << std::endl;
-    return 1;
+    return false;
   }
 
-  if (getSize(1, h)) {
+  if (!getSize(1, h)) {
     std::cerr << "Failed to set window height" << std::endl;
-    return 1;
+    return false;
   }
 
-  return 0;
+  return true;
 }
 
-int extractWindowArgs(App *const a, uint32_t *const w, uint32_t *const h) {
+bool extractWindowArgs(App *const a, uint32_t *const w, uint32_t *const h) {
   std::vector<std::string> const opts = {"width", "height"};
   std::vector<std::string> vals(opts.size(), "");
   auto const handle = a->parser.get();
 
   for (std::size_t i = 0; i < opts.size(); ++i) {
-    std::size_t count{};
+    unsigned count{};
 
-    auto result = ap::getOptionCount(handle, opts[i], &count);
-    if (result != ap::Result::Success) {
-      std::cerr << "Failed to query option count: '" << opts[i];
-      std::cerr << "'" << std::endl;
-      return 1;
+    if (!ap::getOptionCount(handle, opts[i].c_str(), &count)) {
+      printErrorMessage(handle);
+      return false;
     }
 
-    if (count)
-      ap::getOptionInstanceValue(handle, opts[i], 0, &vals[i]);
+    if (count) {
+      char const *value{};
+      if (!ap::getOptionValue(handle, opts[i].c_str(), 0, &value)) {
+        printErrorMessage(handle);
+        return false;
+      }
+      vals[i] = value;
+    }
   }
 
   return convertWindowArgs(&vals, w, h);
 }
 
-int openWindow(App *const a) {
+bool openWindow(App *const a) {
   uint32_t width{640}, height{480};
 
-  if (a->argc > 1 && extractWindowArgs(a, &width, &height)) {
+  if (a->argc > 1 && !extractWindowArgs(a, &width, &height)) {
     std::cerr << "Failed to extract window args." << std::endl;
-    return 1;
+    return false;
   }
 
   auto result = re::createWindow(a->engine.get(), width, height);
@@ -291,11 +321,11 @@ int openWindow(App *const a) {
     std::string err{};
     re::toString(result, &err);
     std::cerr << "Window creation failure: " << err << std::endl;
-    return 1;
+    return false;
   }
 
   a->windowWidth = width;
   a->windowHeight = height;
-  return 0;
+  return true;
 }
 } // namespace demo

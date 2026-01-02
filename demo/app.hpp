@@ -24,23 +24,26 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/argParser.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+using SmartArgParser =
+    std::unique_ptr<ap::ArgParser, void (*)(ap::ArgParser const *const)>;
+
 namespace demo {
 struct App {
   std::size_t argc{};
   char const *const *argv{};
   uint32_t windowWidth{}, windowHeight{};
 
-  ap::UniqueArgParser parser{0, 0};
+  SmartArgParser parser{0, 0};
   re::UniqueRenderEngine engine{0, 0};
 
   glm::mat4 proj{1.f}, view{1.f};
   std::vector<glm::mat4> instances{};
 };
 
-int initialize(App *const);
-int initializeArgParser(App *const);
-int extractWindowArgs(App *const);
-int openWindow(App *const);
-int createScene(App *const);
-int run(App *const);
+bool initialize(App *const);
+bool initializeArgParser(App *const);
+bool extractWindowArgs(App *const);
+bool openWindow(App *const);
+bool createScene(App *const);
+bool run(App *const);
 } // namespace demo
