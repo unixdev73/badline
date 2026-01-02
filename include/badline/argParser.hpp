@@ -63,7 +63,7 @@ bool getFlagPosition(ArgParser const *const handle,
                      unsigned *const position);
 
 bool getOptionCount(ArgParser const *const handle,
-                    char const *argLongForm,
+                    char const *const argLongForm,
                     unsigned *const count);
 
 bool getOptionPosition(ArgParser const *const handle,
