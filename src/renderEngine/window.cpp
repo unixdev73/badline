@@ -513,6 +513,10 @@ Result createGraphicsPipeline(RenderEngineT *const engine) {
   VkPipelineRenderingCreateInfo nextInfo{};
   nextInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
   nextInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
+  nextInfo.colorAttachmentCount = 1;
+
+  VkFormat formats[] = { engine->window->surfaceFormat.format };
+  nextInfo.pColorAttachmentFormats = formats;
 
   VkGraphicsPipelineCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;

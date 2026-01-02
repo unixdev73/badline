@@ -131,6 +131,7 @@ Result setupCreateInfo(VkDeviceCreateInfo *const devCreateInfo,
   devCreateInfo->pQueueCreateInfos = qCreateInfos->data();
 
   features->wideLines = VK_TRUE;
+  features->logicOp = VK_TRUE;
   return Result::Success;
 }
 

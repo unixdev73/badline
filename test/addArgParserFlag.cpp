@@ -41,10 +41,16 @@ int main(int const argc, char const *const *const argv) {
   for (std::size_t i = offset; i < std::size_t(argc); ++i) {
     std::string const arg = argv[i];
     auto pairView = std::ranges::views::split(arg, ':');
-    auto keyVal = std::ranges::to<std::vector<std::string>>(pairView);
-    if (keyVal.empty() || keyVal[0].empty()) {
-      std::cerr << "At least a long form must be provided." << std::endl;
-      return 3;
+    std::vector<std::string> keyVal{};
+    for (auto pv : pairView) {
+      std::string elem{};
+      for (auto e : pv)
+        elem.push_back(e);
+      keyVal.push_back(std::move(elem));
+      if (keyVal.empty() || keyVal[0].empty()) {
+        std::cerr << "At least a long form must be provided." << std::endl;
+        return 3;
+      }
     }
 
     bool const shV = keyVal.size() == 2 && keyVal[1][0] != 0;
