@@ -60,7 +60,7 @@ struct RenderEngineT {
   UniqueResource<VkDescriptorSetLayout_T> descLayout{};
   std::vector<VkDescriptorSet> descSets{};
 
-  static constexpr std::size_t maxDescriptors{100};
+  static constexpr std::size_t maxDescriptors{12};
 };
 
 Result render(RenderEngineT *const engine);
