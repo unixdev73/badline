@@ -81,7 +81,7 @@ int main(int const argc, char const *const *const argv) {
       keyVal.push_back(std::move(elem));
       if (keyVal.empty() || keyVal[0].empty()) {
         std::cerr << "At least a long form must be provided." << std::endl;
-        return ap::Result::ErrorArgLongFormNotValid;
+        return false;
       }
     }
     if (keyVal.empty() || keyVal[0].empty()) {

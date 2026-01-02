@@ -112,11 +112,11 @@ bool update(App *const a) {
   auto &view = a->view;
 
   static const glm::mat4 rotX =
-      glm::rotate(glm::mat4(1), 0.001f, glm::vec3(1, 0, 0));
+      glm::rotate(glm::mat4(1), 0.05f, glm::vec3(1, 0, 0));
   static const glm::mat4 rotY =
-      glm::rotate(glm::mat4(1), 0.001f, glm::vec3(0, 1, 0));
+      glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0, 1, 0));
   static const glm::mat4 rotZ =
-      glm::rotate(glm::mat4(1), 0.001f, glm::vec3(0, 0, 1));
+      glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0, 0, 1));
 
   for (std::size_t i = 0; i < instances.size(); ++i) {
     switch (i % 3) {
@@ -164,7 +164,7 @@ bool run(App *const a) {
     glfwPollEvents();
 
     if (auto now = std::chrono::steady_clock::now();
-        now - timeStamp > frameMinTime) {
+        now - timeStamp >= frameMinTime) {
       if (!update(a)) {
         std::cerr << "Update failed" << std::endl;
         return false;
