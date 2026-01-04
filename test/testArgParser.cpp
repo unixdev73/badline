@@ -24,6 +24,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <iostream>
 #include <ranges>
 #include <vector>
+#include <memory>
 
 using SmartArgParser =
     std::unique_ptr<ap::ArgParser, std::function<void(ap::ArgParser *const)>>;

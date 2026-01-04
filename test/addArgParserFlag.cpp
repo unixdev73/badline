@@ -21,6 +21,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/argParser.hpp>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <ranges>
 #include <vector>
 
