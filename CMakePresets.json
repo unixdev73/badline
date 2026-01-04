@@ -15,8 +15,12 @@
       "binaryDir": "../badline_build",
 
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "BUILD_ALL_TARGETS": "true"
+      "CMAKE_BUILD_TYPE": "Debug",
+      "BUILD_TARGET_ARG_PARSER" : "true",
+      "BUILD_TARGET_RENDER_ENGINE" : "true",
+      "BUILD_TARGET_TESTS" : "true",
+      "BUILD_TARGET_DEMO" : "true",
+      "BUILD_TARGET_DOC" : "true"
       }
     }
   ]

@@ -1,23 +1,24 @@
+############################ INTRO:
 This project follows a few rules:
 
 	-> Every module has to be capable of being built independently!!!
-	-> Every module has its own set of result codes
 	-> Every module provides a public API
 	-> Heavy logic for each module is implemented in the private API
 	-> Only opaque handles are exposed to the client
 	-> No exceptions allowed!!! You can handle external ones, but never throw!
+	-> Each function returns either a bool, or void
 
 The reason for this is simple.
 Dynamic polymorphism and the majority of object oriented programming
 is total trash. And even the parts that are good are usually abused!
 
-Let's be clear. The (IMHO only) two good things about
+Let's be frank. The (IMHO only) two good things about
 object oriented programming is the ability to deallocate resources
 automatically through the use of destructors, and the simplification
 of interfaces through the use of data members.
 
 Apart from RAII and the facade / adapter patterns,
-the rest of OOP is total garbage.
+the rest of OOP is total garbage (and I don't mean PODs which are totally fine).
 It makes the code overcomplicated, introduces useless and unnecessary
 dependencies on user defined types, which increases coupling,
 and slows down execution through vtable lookups in most cases.
@@ -31,7 +32,7 @@ Well, let me tell you something,
 If you need an external library to test your code, then your design
 is absolute trash!!!!!!!!
 
-We don't do that here. Production code is testable code.
+We don't do that here. Production code should be testable code.
 It becomes very easy to test software written using
 the structural programming paradigm.
 
@@ -39,4 +40,21 @@ Why?
 
 BECAUSE THERE IS NO LANGUAGE CONSTRUCT MORE TESTABLE THAN A FUNCTION!!!
 
-Get that inside your head, and never forget it.
+############################ ARCHITECTURE:
+Okay, if you accept the terms and conditions, we can move on to discuss the
+structure of the project.
+
+So far, there are two modules to the game engine (more coming soon).
+
+1. The argument parser module
+	This module uses the CYK algorithm to parse input and retrieve option values,
+count flag occurrences, etc...
+It basically takes int argc and char** argv, and then runs that against
+a CNF grammar, and runs a few semantic actions.
+
+2. The render engine module
+	This module is responsible for rendering things. It uses vulkan.
+The idea is that it will be low level. Meaning that the user will build up
+on top of the render engine. So, the engine will allow the client
+to render something, and easily move things around the gpu.
+That is all.

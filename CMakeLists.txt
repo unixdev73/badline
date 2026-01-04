@@ -2,18 +2,15 @@ cmake_minimum_required(VERSION 3.25)
 project(badline LANGUAGES CXX)
 include(CTest)
 
-message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+set(BUILD_TARGET_ARG_PARSER "false" CACHE STRING "Build arg parser module")
+set(BUILD_TARGET_RENDER_ENGINE "false" CACHE STRING "Build render engine module")
+set(BUILD_TARGET_TESTS "false" CACHE STRING "Build badline tests module")
+set(BUILD_TARGET_DEMO "false" CACHE STRING "Build badline demo module")
+set(BUILD_TARGET_DOC "false" CACHE STRING "Build badline documentation")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 set(CMAKE_CXX_STANDARD_REQUIRED 1)
 set(CMAKE_CXX_STANDARD 23)
-
-if (BUILD_ALL_TARGETS)
-	set(BUILD_TARGET_ARG_PARSER "true")
-	set(BUILD_TARGET_RENDER_ENGINE "true")
-	set(BUILD_TARGET_TESTS "true")
-	set(BUILD_TARGET_DEMO "true")
-endif()
 
 function(setCompileOptions targetName)
 	if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
@@ -26,6 +23,9 @@ endfunction()
 
 include_directories(/usr/local/include)
 include_directories(include)
+
+message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+
 add_subdirectory(src)
 add_subdirectory(doc)
 
