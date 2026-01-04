@@ -27,7 +27,10 @@ include_directories(include)
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
 add_subdirectory(src)
-add_subdirectory(doc)
+
+if (BUILD_TARGET_DOC)
+	add_subdirectory(doc)
+endif()
 
 if (BUILD_TARGET_TESTS)
 	add_subdirectory(test)

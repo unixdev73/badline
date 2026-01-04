@@ -20,19 +20,10 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <vulkan/vk_enum_string_helper.h>
-#include <vector>
-#include <string>
+#include <functional>
+#include <memory>
 
-namespace re {
-struct ErrorLogs {
-  mutable std::vector<std::string> errors{};
-  mutable std::vector<char const *> errptr{};
-};
-
-bool toString(VkResult const result, std::string *const output);
-
-void addErrMsg(ErrorLogs const *const e,
-               std::string const &msg,
-               VkResult r = VK_SUCCESS);
-} // namespace re
+namespace ap {
+template <typename T>
+using CustomUniqPtr = std::unique_ptr<T, std::function<void(T *const)>>;
+}

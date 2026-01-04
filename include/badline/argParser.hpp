@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -27,16 +27,14 @@ struct ArgParser;
  */
 void create(ArgParser **const handle);
 
+/* This creates a CLI parsing grammar;
+ * Without it, parsing is useless :)
+ */
+bool fillParsingDatabase(ArgParser *const handle);
+
 /* Deletes an instance of ArgParser.
  */
 void destroy(ArgParser *const handle);
-
-/* Every function that returns bool will leave an error message
- * if it returns false.
- *
- * If handle = nullptr, the procedure returns.
- */
-void getErrorMessage(ArgParser const *const handle, char const **const message);
 
 bool addFlag(ArgParser *const handle,
              char const *const argLongForm,
@@ -83,4 +81,6 @@ bool getFreeValuePosition(ArgParser const *const handle,
 bool getFreeValue(ArgParser const *const handle,
                   unsigned const instance,
                   char const **const value);
+
+void printLogs(ArgParser const *const);
 } // namespace ap

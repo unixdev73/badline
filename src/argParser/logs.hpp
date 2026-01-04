@@ -18,14 +18,36 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <glm/glm.hpp>
+#pragma once
 
-namespace re {
-struct Vertex;
+#include <string>
 
-bool setPosition(Vertex *const handle, glm::vec3 *const p);
-bool setColor(Vertex *const handle, glm::vec4 *const p);
+namespace ap {
+struct Logs;
 
-bool getPosition(Vertex const *const handle, glm::vec3 *const p);
-bool getColor(Vertex const *const handle, glm::vec4 *const p);
-} // namespace re
+void create(Logs **const handle);
+
+void destroy(Logs *const handle);
+
+void enableInf(Logs *const handle); // by default inf logs are not stored
+
+void enableWrn(Logs *const handle); // by default wrn logs are not stored
+
+void addInfMsg(Logs *const handle,
+               std::string const &tag,
+               std::string const &msg);
+
+void addWrnMsg(Logs *const handle,
+               std::string const &tag,
+               std::string const &msg);
+
+void addErrMsg(Logs *const handle,
+               std::string const &tag,
+               std::string const &msg);
+
+void printLog(std::string const &entry,
+              std::size_t const indentSize = 0,
+              bool flush = true);
+
+void printLogs(Logs const *const handle);
+} // namespace ap

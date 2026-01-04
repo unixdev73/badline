@@ -18,431 +18,460 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include "app.hpp"
-#include <badline/vertices.hpp>
-#include <badline/vertex.hpp>
-#include <badline/indices.hpp>
-#include <badline/instances.hpp>
-#include <badline/transformMatrix.hpp>
+#include "glm/ext/matrix_clip_space.hpp"
+#include "glm/ext/matrix_transform.hpp"
 #include <badline/vulkanBackend.hpp>
-#include <badline/window.hpp>
-#include <functional>
+#include <badline/renderEngine.hpp>
+#include <badline/argParser.hpp>
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 #include <filesystem>
+#include <functional>
 #include <iostream>
-#include <vector>
-#include <string>
+#include <memory>
 #include <chrono>
 
+namespace demo {
+template <typename T>
+using CustomUniqPtr = std::unique_ptr<T, std::function<void(T *const)>>;
+
+struct AppData {
+  int argc{};
+  char const *const *argv{};
+
+  CustomUniqPtr<ap::ArgParser> parserRAII{};
+  CustomUniqPtr<void> glfw{};
+  CustomUniqPtr<re::RenderEngine> engineRAII{};
+
+  ap::ArgParser *parser{};
+  int windowWidth{640};
+  int windowHeight{480};
+  bool printHelp{};
+
+  re::RenderEngine *engine{};
+  re::VulkanBackend *backend{};
+  glm::mat4 projection{1.f};
+  glm::mat4 view{1.f};
+  glm::mat4 vikingModel{1.f};
+  glm::mat4 cubeModel{1.f};
+  re::VulkanWindow *window{};
+  GLFWwindow *glfwWin{};
+  re::Texture *trump{};
+  re::Object *cube{};
+  re::Texture *vikingTex{};
+  re::Object *vikingObj{};
+};
+
+bool initialize(AppData *const);
+void updateCWD(AppData *const);
+bool initializeArgParser(AppData *const);
+bool extractIf(ap::ArgParser *const, std::string const &, std::string *const);
+bool convert(std::string const &input, int *const output);
+bool extractCLI(AppData *const);
+CustomUniqPtr<ap::ArgParser> createArgParser();
+bool initializeGLFW(AppData *const);
+bool initializeEngine(AppData *const);
+CustomUniqPtr<re::RenderEngine> createRenderEngine();
+bool loadAssets(AppData *const);
+bool isFlag(ap::ArgParser *const, std::string const &flag);
+void printHelpMsg();
+bool handleInput(AppData *const, bool *const);
+bool createCube(AppData *const a);
+bool run(AppData *const);
+} // namespace demo
+
 int main(int const argc, char const *const *const argv) {
+  demo::AppData data{.argc = argc, .argv = argv};
+
   try {
-    demo::raiiGLFW glfwGuard{};
-    demo::App a{.argc = std::size_t(argc), .argv = argv};
-
-    if (demo::initialize(&a))
-      if (demo::run(&a))
-        return 0;
-
-    re::printErrors(a.engine.get());
-    return 1;
+    if (!demo::initialize(&data))
+      return 1;
+    if (!data.printHelp && !demo::run(&data))
+      return 1;
 
   } catch (std::exception const &e) {
     std::cerr << "Error: Caught exception: " << e.what() << std::endl;
   } catch (...) {
-    std::cerr << "Error: Caught unknown exception." << std::endl;
+    std::cerr << "Error: Caught unknown exception" << std::endl;
   }
+
+  return 0;
 }
 
 namespace demo {
-void printErrorMessage(ap::ArgParser const *const parser) {
-  char const *errorString{};
-  ap::getErrorMessage(parser, &errorString);
-  if (!errorString)
-    return;
-  std::cerr << "ERROR: " << errorString << std::endl;
-}
+bool run(AppData *const a) {
+  a->projection = glm::perspective(
+      45.f, float(a->windowWidth) / float(a->windowHeight), 0.1f, 100.f);
+  re::setCameraProjection(a->backend, a->projection);
 
-bool createScene(App *const a) {
-  re::Vertices *vertices{};
-  if (!re::createVertices(a->engine.get(), &vertices)) {
-    std::cerr << "createScene: Failed to create vertices" << std::endl;
+  a->view =
+      glm::lookAt(glm::vec3{0, 4.f, 0.1f}, glm::vec3{}, glm::vec3{0, 1.f, 0});
+  re::setCameraView(a->backend, a->view);
+
+  if (!createCube(a))
     return false;
-  }
+	float const cubeSc = 0.5f;
+	a->cubeModel = glm::scale(glm::mat4{1.f}, glm::vec3{cubeSc, cubeSc, cubeSc});
+  a->cubeModel = glm::translate(a->cubeModel, glm::vec3{0, 0, 2.5f});
 
-  struct VertData {
-    glm::vec3 pos{};
-    glm::vec4 col{};
-  };
-  std::vector<VertData> vertData = {
-      {{0.000000, 2.000000, 2.000000}, {1.f, 0.f, 0.f, 1.f}},
-      {{0.000000, 0.000000, 2.000000}, {1.f, 0.f, 0.f, 1.f}},
-      {{2.000000, 0.000000, 2.000000}, {1.f, 0.f, 0.f, 1.f}},
-      {{2.000000, 2.000000, 2.000000}, {1.f, 0.f, 0.f, 1.f}},
-      {{0.000000, 2.000000, 0.000000}, {1.f, 0.f, 0.f, 1.f}},
-      {{0.000000, 0.000000, 0.000000}, {1.f, 0.f, 0.f, 1.f}},
-      {{2.000000, 0.000000, 0.000000}, {1.f, 0.f, 0.f, 1.f}},
-      {{2.000000, 2.000000, 0.000000}, {1.f, 0.f, 0.f, 1.f}},
-  };
+	float const vkSc = 2.f;
+	a->vikingModel = glm::scale(a->vikingModel, glm::vec3{vkSc, vkSc, vkSc});
+	a->vikingModel = glm::translate(a->vikingModel, glm::vec3{0,0,-0.5f});
 
-  for (auto &v : vertData) {
-    re::Vertex *vert{};
-    re::addVertex(vertices, &vert);
-    re::setPosition(vert, &v.pos);
-    re::setColor(vert, &v.col);
-  }
-
-  if (!re::uploadVertices(a->engine.get())) {
-    std::cerr << "createScene: Failed to upload vertices. " << std::endl;
-    return false;
-  }
-
-  std::vector<uint32_t> indexSeq = {
-      0, 1, 2, 2, 3, 0, // Front face
-      4, 5, 6, 6, 7, 4, // Back face
-      0, 3, 7, 7, 4, 0, // Left face
-      1, 2, 6, 6, 5, 1, // Right face
-      3, 2, 6, 6, 7, 3, // Top face
-      0, 1, 5, 5, 4, 0  // Bottom face
-  };
-
-  re::Indices *indices{};
-  if (!re::createIndices(a->engine.get(), &indices)) {
-    std::cerr << "createScene: Failed to create indices. " << std::endl;
-    return false;
-  }
-
-  for (auto index : indexSeq)
-    re::addIndex(indices, index);
-
-  if (!re::uploadIndices(a->engine.get())) {
-    std::cerr << "createScene: Failed to upload indices. " << std::endl;
-    return false;
-  }
-
-  re::Instances *instances{};
-  if (!re::createInstances(a->engine.get(), &instances)) {
-    std::cerr << "createScene: Failed to create instances. " << std::endl;
-    return false;
-  }
-
-  a->instanceRotations.resize(3, glm::mat4(1));
-  a->instanceTranslations.resize(a->instanceRotations.size(), glm::mat4(1));
-
-  for (auto const &m : a->instanceRotations) {
-    unsigned long id = 0;
-    if (!re::addInstance(instances, &id)) {
-      std::cerr << "createScene: Failed to add instance. " << std::endl;
-      return false;
-    }
-    re::setTransform(instances, id, &m);
-  }
-
-  if (!re::uploadInstances(a->engine.get())) {
-    std::cerr << "createScene: Failed to upload instances. " << std::endl;
-    return false;
-  }
-
-  a->view = glm::translate(glm::mat4(1), glm::vec3(0, 0, -15));
-  re::TransformMatrix *viewTr, *projTr{};
-
-  if (!re::createProjection(a->engine.get(), &projTr)) {
-    std::cerr << "createScene: Failed to create projection. " << std::endl;
-    return false;
-  }
-
-  auto const aspect = float(a->windowWidth) / float(a->windowHeight);
-  a->proj = glm::perspective(glm::radians(45.f), aspect, 0.1f, 100.f);
-
-  re::setMatrix(projTr, &a->proj);
-  if (!re::setProjection(a->engine.get(), projTr)) {
-    std::cerr << "createScene: Failed to set projection. " << std::endl;
-    return false;
-  }
-
-  if (!re::createView(a->engine.get(), &viewTr)) {
-    std::cerr << "createScene: Failed to create view. " << std::endl;
-    return false;
-  }
-
-  re::setMatrix(viewTr, &a->view);
-  if (!re::setView(a->engine.get(), viewTr)) {
-    std::cerr << "createScene: Failed to set view. " << std::endl;
-    return false;
-  }
-
-  return true;
-}
-
-bool update(App *const a) {
-  static const glm::mat4 rotX =
-      glm::rotate(glm::mat4(1), 0.05f, glm::vec3(1, 0, 0));
-  static const glm::mat4 rotY =
-      glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0, 1, 0));
-  static const glm::mat4 rotZ =
-      glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0, 0, 1));
-
-  for (std::size_t i = 0; i < a->instanceRotations.size(); ++i) {
-    switch (i % 3) {
-    case 0:
-      a->instanceRotations[i] = a->instanceRotations[i] * rotX;
-      break;
-    case 1:
-      break;
-    case 2:
-      a->instanceRotations[i] = a->instanceRotations[i] * rotZ;
-      break;
-    }
-  }
-
-  re::Instances *instances{};
-  if (!re::createInstances(a->engine.get(), &instances)) {
-    std::cerr << "update: Failed to create instances. " << std::endl;
-    return false;
-  }
-
-  for (std::size_t i = 0; i < a->instanceTranslations.size(); ++i) {
-    auto initTransl = glm::translate(glm::mat4(1), glm::vec3(-1.f, -1.f, -1.f));
-    a->instanceTranslations[i] =
-        glm::translate(glm::mat4(1), glm::vec3(-4.f + i * 4.f, 0.f, 0.f));
-    auto const m =
-        a->instanceTranslations[i] * a->instanceRotations[i] * initTransl;
-
-    unsigned long tr{};
-    if (!re::addInstance(instances, &tr)) {
-      std::cerr << "update: Failed to add instance" << std::endl;
-      return false;
-    }
-
-    if (!re::setTransform(instances, tr, &m)) {
-      std::cerr << "update: Failed to set transform" << std::endl;
-      return false;
-    }
-  }
-
-  if (!re::uploadInstances(a->engine.get())) {
-    std::cerr << "update: Failed to upload instances. " << std::endl;
-    return false;
-  }
-
-  re::TransformMatrix *viewTr{};
-  a->view = a->view * rotY;
-  if (!re::createView(a->engine.get(), &viewTr)) {
-    std::cerr << "createScene: Failed to create view. " << std::endl;
-    return false;
-  }
-
-  re::setMatrix(viewTr, &a->view);
-  if (!re::setView(a->engine.get(), viewTr)) {
-    std::cerr << "createScene: Failed to set view. " << std::endl;
-    return false;
-  }
-
-  return true;
-}
-
-bool run(App *const a) {
-  if (!createScene(a)) {
-    std::cerr << "run: Creating scene failed" << std::endl;
-    return false;
-  }
-
-  auto const engine = a->engine.get();
-  bool windowOpen = true;
-  re::isOpen(a->win, &windowOpen);
-
-  constexpr auto frameMinTime = std::chrono::milliseconds(17);
-  auto timeStamp = std::chrono::steady_clock::now();
-
-  while (windowOpen) {
+  auto beginFrame = std::chrono::steady_clock::now();
+  while (!glfwWindowShouldClose(a->glfwWin)) {
     glfwPollEvents();
+    bool quit = false;
 
-    if (auto now = std::chrono::steady_clock::now();
-        now - timeStamp >= frameMinTime) {
-      if (!update(a)) {
-        std::cerr << "run: Update failed" << std::endl;
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - beginFrame) >=
+        std::chrono::milliseconds(17)) {
+
+      if (!handleInput(a, &quit))
+        return false;
+      if (quit)
+        return true;
+
+      if (!re::stage(a->backend, a->vikingObj, a->vikingModel)) {
+        re::printLogs(a->engine);
         return false;
       }
 
-      if (!re::render(engine)) {
-        std::cerr << "run: Rendering failed" << std::endl;
+      if (!re::stage(a->backend, a->cube, a->cubeModel)) {
+        re::printLogs(a->engine);
         return false;
       }
 
-      timeStamp = now;
+      if (!re::render(a->backend, a->window)) {
+        re::printLogs(a->engine);
+        return false;
+      }
+
+      beginFrame = std::chrono::steady_clock::now();
     }
-
-    bool keyPressed = false;
-    re::isKeyPressed(a->win, GLFW_KEY_ESCAPE, &keyPressed);
-    if (keyPressed)
-      re::close(a->win);
-
-    re::isOpen(a->win, &windowOpen);
   }
 
   return true;
 }
 
-std::unique_ptr<re::RenderEngine, std::function<void(re::RenderEngine *const)>>
-createSmartRenderEngine() {
+bool createCube(AppData *const a) {
+  if (!re::createObject(a->backend, a->trump, &a->cube)) {
+    std::cerr << "Failed to create cube" << std::endl;
+    return false;
+  }
+
+  // --- Front face (Z = 0.5) ---
+  re::addVertex(a->cube, {-0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}, {}, {});
+  re::addVertex(a->cube, {-0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}, {}, {});
+
+  // --- Back face (Z = -0.5) ---
+  re::addVertex(a->cube, {0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {}, {});
+
+  // --- Left face (X = -0.5) ---
+  re::addVertex(a->cube, {-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}, {}, {});
+  re::addVertex(a->cube, {-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {}, {});
+
+  // --- Right face (X = 0.5) ---
+  re::addVertex(a->cube, {0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}, {}, {});
+
+  // --- Top face (Y = 0.5) ---
+  re::addVertex(a->cube, {-0.5f, 0.5f, 0.5f}, {1.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, {}, {});
+  re::addVertex(a->cube, {-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {}, {});
+
+  // --- Bottom face (Y = -0.5) ---
+  re::addVertex(a->cube, {-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {}, {});
+  re::addVertex(a->cube, {0.5f, -0.5f, 0.5f}, {0.0f, 1.0f}, {}, {});
+  re::addVertex(a->cube, {-0.5f, -0.5f, 0.5f}, {1.0f, 1.0f}, {}, {});
+
+  std::vector<uint32_t> cubeIndices;
+
+  for (uint32_t i = 0; i < 6; ++i) {
+    uint32_t start = i * 4;
+    cubeIndices.push_back(start + 0);
+    cubeIndices.push_back(start + 1);
+    cubeIndices.push_back(start + 2);
+    cubeIndices.push_back(start + 2);
+    cubeIndices.push_back(start + 3);
+    cubeIndices.push_back(start + 0);
+  }
+
+  re::setIndices(a->cube, std::move(cubeIndices));
+  re::uploadObjectDataToGPU(a->cube);
+  return true;
+}
+
+bool handleInput(AppData *const a, bool *const quit) {
+  if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_ESCAPE)) {
+    *quit = true;
+    return true;
+  }
+
+  float const angle = 0.05;
+
+  if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_X) &&
+      GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_RIGHT)) {
+    a->view = glm::rotate(a->view, angle, glm::vec3{1.f, 0, 0});
+    re::setCameraView(a->backend, a->view);
+  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_X) &&
+             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_LEFT)) {
+    a->view = glm::rotate(a->view, -angle, glm::vec3{1.f, 0, 0});
+    re::setCameraView(a->backend, a->view);
+  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_Y) &&
+             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_RIGHT)) {
+    a->view = glm::rotate(a->view, angle, glm::vec3{0, 1.f, 0});
+    re::setCameraView(a->backend, a->view);
+  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_Y) &&
+             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_LEFT)) {
+    a->view = glm::rotate(a->view, -angle, glm::vec3{0, 1.f, 0});
+    re::setCameraView(a->backend, a->view);
+  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_Z) &&
+             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_RIGHT)) {
+    a->view = glm::rotate(a->view, angle, glm::vec3{0, 0, 1.f});
+    re::setCameraView(a->backend, a->view);
+  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_Z) &&
+             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_LEFT)) {
+    a->view = glm::rotate(a->view, -angle, glm::vec3{0, 0, 1.f});
+    re::setCameraView(a->backend, a->view);
+  }
+  return true;
+}
+
+void printHelpMsg() {
+  std::cout << "This is a badline demo. Usage: [--width] [--height] [--help]";
+  std::cout << "\nThe width and height options define the window resolution";
+  std::cout << std::endl;
+}
+
+bool initialize(AppData *const data) {
+  updateCWD(data);
+
+  if (!initializeArgParser(data)) {
+    ap::printLogs(data->parser);
+    return false;
+  }
+
+  if (data->printHelp) {
+    demo::printHelpMsg();
+    return true;
+  }
+
+  if (!initializeGLFW(data))
+    return false;
+
+  if (!initializeEngine(data)) {
+    re::printLogs(data->engine);
+    return false;
+  }
+
+  if (!loadAssets(data)) {
+    re::printLogs(data->engine);
+    return false;
+  }
+
+  return true;
+}
+
+bool loadAssets(AppData *const data) {
+  if (!re::createTexture(data->backend, &data->trump))
+    return false;
+
+  if (!re::loadFromFile(data->trump, "./assets/trump.jpg"))
+    return false;
+
+  if (!re::createTexture(data->backend, &data->vikingTex))
+    return false;
+
+  if (!re::loadFromFile(data->vikingTex, "./assets/viking_room.png"))
+    return false;
+
+  if (!re::createObject(data->backend, data->vikingTex, &data->vikingObj))
+    return false;
+
+  if (!re::loadFromFile(data->vikingObj, "./assets/viking_room.obj"))
+    return false;
+
+  return true;
+}
+
+bool initializeEngine(AppData *const data) {
+  data->engineRAII = demo::createRenderEngine();
+  if (!data->engineRAII) {
+    std::cerr << "Error: Failed to create render engine" << std::endl;
+    return false;
+  }
+  data->engine = data->engineRAII.get();
+
+  re::enableInfoLogs(data->engine);
+  re::enableWarnings(data->engine);
+
+  if (!re::createBackend(data->engine, &data->backend))
+    return false;
+
+  if (!re::enableValidationLayers(data->backend))
+    return false;
+
+  // if (!re::setPreferredGPU(data->backend, ".*llvmpipe.*"))
+  //  return false;
+
+  if (!re::initialize(data->backend))
+    return false;
+
+  if (!re::createWindow(data->backend,
+                        data->windowWidth,
+                        data->windowHeight,
+                        "Demo",
+                        &data->window))
+    return false;
+
+  if (!re::getWindowHandle(data->window, &data->glfwWin))
+    return false;
+
+  return true;
+}
+
+bool initializeGLFW(AppData *const data) {
+  if (!glfwInit()) {
+    std::cerr << "Error: Failed to initialize GLFW" << std::endl;
+    return false;
+  }
+  data->glfw = {malloc(1), [](auto *p) {
+                  free(p);
+                  glfwTerminate();
+                }};
+  return true;
+}
+
+bool initializeArgParser(AppData *const data) {
+  data->parserRAII = createArgParser();
+  if (!data->parserRAII) {
+    std::cerr << "Error: Failed to create parser" << std::endl;
+    return false;
+  }
+  data->parser = data->parserRAII.get();
+
+  if (!ap::addOption(data->parser, "width"))
+    return false;
+
+  if (!ap::addOption(data->parser, "height"))
+    return false;
+
+  if (!ap::addFlag(data->parser, "help"))
+    return false;
+
+  if (data->argc > 1 && !ap::parse(data->parser, data->argv, 1, data->argc))
+    return false;
+
+  if (!extractCLI(data))
+    return false;
+
+  return true;
+}
+
+bool extractCLI(AppData *const data) {
+  if (!data)
+    return false;
+
+  std::string tmp{};
+  if (!extractIf(data->parser, "width", &tmp))
+    return false;
+  if (tmp.size() && !convert(tmp, &data->windowWidth))
+    return false;
+
+  if (!extractIf(data->parser, "height", &tmp))
+    return false;
+  if (tmp.size() && !convert(tmp, &data->windowHeight))
+    return false;
+
+  if (isFlag(data->parser, "help"))
+    data->printHelp = true;
+
+  return true;
+}
+
+bool isFlag(ap::ArgParser *const handle, std::string const &flag) {
+  unsigned count{};
+  if (!ap::getFlagCount(handle, flag.c_str(), &count))
+    return false;
+  if (!count)
+    return false;
+
+  return true;
+}
+
+bool convert(std::string const &input, int *const output) {
+  int numVal = 0;
+  try {
+    numVal = std::stoi(input);
+  } catch (...) {
+    std::cerr << "Error: Failed to convert: " << input << " to number\n";
+    return false;
+  }
+
+  *output = numVal;
+  return true;
+}
+
+bool extractIf(ap::ArgParser *const handle,
+               std::string const &option,
+               std::string *const value) {
+  if (!handle)
+    return false;
+
+  if (!option.size()) {
+    std::cerr << "Error: The option identifier is empty" << std::endl;
+    return false;
+  }
+
+  if (!value) {
+    std::cerr << "Error: The value output variable = nullptr" << std::endl;
+    return false;
+  }
+
+  unsigned count{};
+  if (!ap::getOptionCount(handle, option.c_str(), &count)) {
+    std::cerr << "Error: Failed to get option count" << std::endl;
+    return false;
+  }
+
+  if (count) {
+    char const *val{};
+    if (!ap::getOptionValue(handle, option.c_str(), 0, &val)) {
+      std::cerr << "Error: Failed to get option value" << std::endl;
+      return false;
+    }
+    *value = val;
+  }
+
+  return true;
+}
+
+void updateCWD(AppData *const data) {
+  namespace fs = std::filesystem;
+  fs::current_path(fs::canonical(fs::path{data->argv[0]}.parent_path()));
+}
+
+CustomUniqPtr<ap::ArgParser> createArgParser() {
+  ap::ArgParser *handle{};
+  ap::create(&handle);
+  return {handle, ap::destroy};
+}
+
+CustomUniqPtr<re::RenderEngine> createRenderEngine() {
   re::RenderEngine *handle{};
   re::create(&handle);
   return {handle, re::destroy};
-}
-
-bool initialize(App *const a) {
-  namespace fs = std::filesystem;
-  fs::current_path(fs::canonical(fs::path{a->argv[0]}.parent_path()));
-
-  if (a->argc > 1 && !initializeArgParser(a))
-    return false;
-
-  a->engine = createSmartRenderEngine();
-  if (!a->engine) {
-    std::cerr << "initialize: Failed to create render engine" << std::endl;
-    return false;
-  }
-
-  re::VulkanBackend *vk{};
-  if (!re::createBackend(a->engine.get(), &vk)) {
-    std::cerr << "initialize: Failed to create render backend" << std::endl;
-    return false;
-  }
-
-  re::setApplicationName(vk, "Demo");
-  re::setValidationLayersOn(vk);
-  re::initialize(a->engine.get());
-
-  if (!openWindow(a, vk)) {
-    std::cerr << "initialize: Failed to open window" << std::endl;
-    return false;
-  }
-
-  return true;
-}
-
-SmartArgParser createSmartArgParser() {
-  ap::ArgParser *parser{};
-  ap::create(&parser);
-  return SmartArgParser{parser, ap::destroy};
-}
-
-bool initializeArgParser(App *const a) {
-  a->parser = createSmartArgParser();
-  auto const p = a->parser.get();
-
-  if (!p) {
-    std::cerr << "Failed to create arg parser" << std::endl;
-    return false;
-  }
-
-  if (!ap::addOption(p, "width", 'w')) {
-    printErrorMessage(p);
-    return false;
-  }
-
-  if (!ap::addOption(p, "height", 'h')) {
-    printErrorMessage(p);
-    return false;
-  }
-
-  if (!ap::parse(p, a->argv, 1, a->argc)) {
-    printErrorMessage(p);
-    return false;
-  }
-
-  return true;
-}
-
-bool convertToNumber(std::string const &input, long long *const output) {
-  if (input.size()) {
-    try {
-      *output = std::stoll(input);
-    } catch (...) {
-      std::cerr << "Converting: '" << input << "' to a number failed\n";
-      return false;
-    }
-  } else
-    *output = 0;
-  return true;
-}
-
-bool convertWindowArgs(std::vector<std::string> *const vals,
-                       uint32_t *const w,
-                       uint32_t *const h) {
-  auto getSize = [&vals](std::size_t const i, uint32_t *const output) {
-    long long out{};
-    if (!convertToNumber(vals->at(i), &out))
-      return false;
-    if (out)
-      *output = out;
-    return true;
-  };
-
-  if (!getSize(0, w)) {
-    std::cerr << "Failed to set window width" << std::endl;
-    return false;
-  }
-
-  if (!getSize(1, h)) {
-    std::cerr << "Failed to set window height" << std::endl;
-    return false;
-  }
-
-  return true;
-}
-
-bool extractWindowArgs(App *const a, uint32_t *const w, uint32_t *const h) {
-  std::vector<std::string> const opts = {"width", "height"};
-  std::vector<std::string> vals(opts.size(), "");
-  auto const handle = a->parser.get();
-
-  for (std::size_t i = 0; i < opts.size(); ++i) {
-    unsigned count{};
-
-    if (!ap::getOptionCount(handle, opts[i].c_str(), &count)) {
-      printErrorMessage(handle);
-      return false;
-    }
-
-    if (count) {
-      char const *value{};
-      if (!ap::getOptionValue(handle, opts[i].c_str(), 0, &value)) {
-        printErrorMessage(handle);
-        return false;
-      }
-      vals[i] = value;
-    }
-  }
-
-  return convertWindowArgs(&vals, w, h);
-}
-
-bool openWindow(App *const a, re::VulkanBackend *const vk) {
-  uint32_t width{640}, height{480};
-
-  if (a->argc > 1 && !extractWindowArgs(a, &width, &height)) {
-    std::cerr << "Failed to extract window args." << std::endl;
-    return false;
-  }
-
-  re::Window *win{};
-  if (!re::createWindow(a->engine.get(), &win)) {
-    std::cerr << "openWindow: Window creation failure: " << std::endl;
-    return false;
-  }
-
-  if (!re::setResolution(win, width, height)) {
-    std::cerr << "openWindow: Failed to set resolution: " << std::endl;
-    return false;
-  }
-
-  if (!re::open(win, vk)) {
-    std::cerr << "openWindow: Failed to open window: " << std::endl;
-    return false;
-  }
-
-  a->win = win;
-  a->windowWidth = width;
-  a->windowHeight = height;
-  return true;
 }
 } // namespace demo

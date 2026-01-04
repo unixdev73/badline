@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -25,5 +25,5 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 namespace re {
 template <typename T>
-using UniqueRes = std::unique_ptr<T, std::function<void(T *const)>>;
+using CustomUniqPtr = std::unique_ptr<T, std::function<void(T *const)>>;
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -56,9 +56,8 @@ bool initParseChart(ArgParser *const parser, std::string const *const input) {
     }
 
     if (!validToken) {
-      auto const m =
-          std::string{"initParseChart: Failed to map token: "} + tokenValue;
-      setErrMsg(parser, m + " to nterm");
+      auto const m = std::string{"Failed to map token: "} + tokenValue;
+      addErrMsg(parser, __func__, m + " to nterm");
       return false;
     }
   }
@@ -125,7 +124,7 @@ bool handleArgList(ArgParser *const handle,
 
   for (std::size_t i = 0; i < ti.argName.size() - 1; ++i) {
     if (!fl.shortForm.contains(ti.argName[i])) {
-      errMsg = "handleArgList: Expected an argument list token";
+      errMsg = "Expected an argument list token";
       result = false;
       break;
     }
@@ -134,7 +133,7 @@ bool handleArgList(ArgParser *const handle,
   if (result) {
     if (!fl.shortForm.contains(ti.argName.back()) &&
         !op.shortForm.contains(ti.argName.back())) {
-      errMsg = "handleArgList: Expected an argument list token";
+      errMsg = "Expected an argument list token";
       result = false;
     }
   }
@@ -164,7 +163,7 @@ bool handleArgList(ArgParser *const handle,
   }
 
   if (!result)
-    setErrMsg(handle, errMsg);
+    addErrMsg(handle, __func__, errMsg);
   return result;
 }
 
@@ -188,7 +187,7 @@ bool handleLongArg(ArgParser *const handle, std::size_t const position) {
     fl.longForm.at(ti.argName)->push_back({position, ""});
 
   else {
-    setErrMsg(handle, "handleLongArg: The argument long form is not valid");
+    addErrMsg(handle, __func__, "The argument long form is not valid");
     return false;
   }
 
@@ -215,7 +214,7 @@ bool handleShortArg(ArgParser *const handle, std::size_t const position) {
     fl.shortForm.at(ti.argName[0])->push_back({position, ""});
 
   else {
-    setErrMsg(handle, "handleShortArg: The argument short form is not valid");
+    addErrMsg(handle, __func__, "The argument short form is not valid");
     return false;
   }
 
@@ -293,8 +292,8 @@ bool parseCYK(ArgParser *const parser, std::string const *const input) {
   if (chart[input->size() - 1][0][start])
     return true;
 
-  setErrMsg(parser,
-            "parseCYK: The start symbol was not derived from the input");
+  addErrMsg(
+      parser, __func__, "The start symbol was not derived from the input");
   return false;
 }
 
@@ -321,7 +320,7 @@ bool handleState(ArgParser *const handle,
     if ((*token)[0] == '-' &&
         handle->currentState != State::HandleOptionRogueValue) {
       handle->errorPosition = position;
-      setErrMsg(handle, "handleState: Every option requires a value");
+      addErrMsg(handle, __func__, "Every option requires a value");
       return false;
     }
     handle->targetOption->back().value = *token;
@@ -535,7 +534,8 @@ bool areOptionsAssigned(ArgParser const *const handle) {
     auto const &instances = *opt.second;
     for (auto const &inst : instances)
       if (inst.value.empty()) {
-        setErrMsg(handle,
+        addErrMsg(handle,
+                  __func__,
                   "The option: " + opt.first + " was not given a value");
         return false;
       }

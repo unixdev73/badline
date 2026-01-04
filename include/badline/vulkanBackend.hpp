@@ -19,42 +19,70 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <vulkan/vulkan.h>
+#include <glm/glm.hpp>
+#include <functional>
+#include <vector>
+#include <string>
+#include <memory>
 
-struct VmaAllocator_T;
-typedef struct VmaAllocator_T *VmaAllocator;
+#pragma once
+
+struct GLFWwindow;
 
 namespace re {
 struct VulkanBackend;
+struct VulkanWindow;
+struct Texture;
+struct Object;
 
-void setValidationLayersOn(VulkanBackend *const handle);
-
-bool setApplicationName(VulkanBackend *const handle, char const *const p);
+bool enableValidationLayers(VulkanBackend *const handle);
 
 bool setPreferredGPU(VulkanBackend *const handle, char const *const p);
 
-bool setPreferredVersionOfAPI(VulkanBackend *const handle, uint32_t const p);
+bool setApplicationName(VulkanBackend *const handle, char const *const p);
 
-bool getVersionOfAPI(VulkanBackend const *const handle, uint32_t *const p);
+/* Do not call any of the functions below until this one has been called */
+bool initialize(VulkanBackend *const handle);
 
-bool getVulkanInstance(VulkanBackend const *const backend, VkInstance *const p);
+bool createWindow(VulkanBackend *const handle,
+                  uint32_t const width,
+                  uint32_t const height,
+                  char const *const title,
+                  VulkanWindow **const window);
 
-bool getPhysicalDevice(VulkanBackend const *const backend,
-                       VkPhysicalDevice *const p);
+bool getWindowHandle(VulkanWindow const *const handle,
+                     GLFWwindow **const window);
 
-bool getLogicalDevice(VulkanBackend const *const backend, VkDevice *const p);
+bool setCameraProjection(VulkanBackend *const handle, glm::mat4 const &m);
 
-bool getMemoryAllocator(VulkanBackend const *const backend,
-                        VmaAllocator *const p);
+bool setCameraView(VulkanBackend *const handle, glm::mat4 const &m);
 
-bool getCommandPool(VulkanBackend const *const backend, VkCommandPool *const p);
+bool createObject(VulkanBackend *const handle,
+                  Texture const *const t,
+                  Object **const object);
 
-bool getVulkanFence(VulkanBackend const *const backend, VkFence *const p);
+bool addVertex(Object *const handle,
+               glm::vec3 const &position,
+               glm::vec2 const &texCoord,
+               glm::vec3 const &normal,
+               glm::vec4 const &color);
 
-bool getGraphicsQueue(VulkanBackend const *const backend, VkQueue *const p);
+bool setIndices(Object *const handle, std::vector<uint32_t> indices);
 
-bool getVertexBuffer(VulkanBackend const *const backend, VkBuffer *const p);
+bool uploadObjectDataToGPU(Object *const handle);
 
-bool getIndexBuffer(VulkanBackend const *const backend, VkBuffer *const p);
+bool loadFromFile(Object *const handle, std::string const &path);
 
-bool getInstanceBuffer(VulkanBackend const *const backend, VkBuffer *const p);
+bool createTexture(VulkanBackend *const handle, Texture **const object);
+
+bool loadFromFile(Texture *const handle, std::string const &path);
+
+template <typename T>
+using CustomUniqPtr = std::unique_ptr<T, std::function<void(T *const)>>;
+
+bool stage(VulkanBackend *const handle,
+           Object const *const object,
+           glm::mat4 const &transform);
+
+bool render(VulkanBackend *const handle, VulkanWindow *const target);
 } // namespace re

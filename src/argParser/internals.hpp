@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -20,6 +20,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
+#include "smartResource.hpp"
 #include <unordered_map>
 #include <functional>
 #include <string>
@@ -150,7 +151,10 @@ struct ParsingDatabase {
   TokenInfo tokenInfo{};
 };
 
+struct Logs;
+
 struct ArgParser {
+  mutable CustomUniqPtr<Logs> logs{};
   std::vector<ArgInstanceInfo> freeValues{};
   ArgInstanceDatabase options{};
   ArgInstanceDatabase flags{};
@@ -161,15 +165,11 @@ struct ArgParser {
 
   std::vector<ArgInstanceInfo> *targetOption{};
   std::size_t errorPosition{};
-  mutable std::string errorMessage{"OK"};
   bool databaseFilled{false};
 };
 } // namespace ap
 
 namespace ap {
-inline void setErrMsg(ArgParser const *const handle, std::string message) {
-  handle->errorMessage = std::move(message);
-}
 
 bool updateArguments(ArgParser *const handle,
                      std::string const *const token,
@@ -192,4 +192,16 @@ bool fillParsingDatabaseWithDigits(ParsingDatabase *const database);
 bool fillParsingDatabaseWithMisc(ParsingDatabase *const database);
 bool fillParsingDatabase(ParsingDatabase *const database);
 bool areOptionsAssigned(ArgParser const *const handle);
+
+void addErrMsg(ArgParser const *const handle,
+               std::string const &tag,
+               std::string const &msg);
+
+void addWrnMsg(ArgParser const *const handle,
+               std::string const &tag,
+               std::string const &msg);
+
+void addInfMsg(ArgParser const *const handle,
+               std::string const &tag,
+               std::string const &msg);
 } // namespace ap

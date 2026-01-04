@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -32,14 +32,6 @@ SmartArgParser createSmartArgParser() {
   ap::ArgParser *parser{};
   ap::create(&parser);
   return SmartArgParser{parser, ap::destroy};
-}
-
-void printErrorMessage(ap::ArgParser const *const parser) {
-  char const *errorString{};
-  ap::getErrorMessage(parser, &errorString);
-  if (!errorString)
-    return;
-  std::cerr << "ERROR: " << errorString << std::endl;
 }
 
 using ap::addOption;
@@ -78,14 +70,14 @@ int main(int const argc, char const *const *const argv) {
     auto result =
         addOption(parser.get(), keyVal[0].c_str(), shV ? keyVal[1][0] : 0);
     if (!result) {
-      printErrorMessage(handle);
+      printLogs(handle);
       return 4;
     }
   }
 
   auto result = ap::parse(handle, argv, offset, argc);
   if (!result) {
-    printErrorMessage(handle);
+    printLogs(handle);
     return 5;
   }
 

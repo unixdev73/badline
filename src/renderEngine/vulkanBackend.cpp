@@ -18,321 +18,834 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include "smartResource.hpp"
+#include "logs.hpp"
+
 #include <badline/vulkanBackend.hpp>
-#include "vulkanBackend.hpp"
-#include <unordered_map>
-#include "error.hpp"
+#include <vulkan/vk_enum_string_helper.h>
+#include <vulkan/vulkan.h>
+#include "vk_mem_alloc.h"
+#include "vulkan/vulkan_core.h"
+#include <GLFW/glfw3.h>
+
+#define TINYOBJLOADER_USE_MAPBOX_EARCUT
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_NO_SIMD
+#include "stb_image.h"
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
+#include <glm/glm.hpp>
+
 #include <fstream>
+#include <cstddef>
+#include <string>
+#include <vector>
+#include <regex>
 
 namespace re {
-template <typename T, template <typename> typename C>
-std::vector<T> subtract(C<T> const &minuend, C<T> const &subtrahend) {
-  std::vector<T> difference{};
+struct BackendInfo {
+  static constexpr unsigned MIN_REQUIRED_VK_API_VERSION = VK_API_VERSION_1_3;
+  bool enableValidationLayers{false};
+  unsigned requiredVersionOfAPI{};
+  std::string preferredGPU;
+  std::string appName;
+};
 
-  for (auto const &minuendElement : minuend) {
-    bool exists = false;
+struct VulkanInstance {
+  CustomUniqPtr<VkInstance_T> handle;
+  unsigned activeVersionOfAPI{};
+};
 
-    for (auto const &subtrahendElement : subtrahend) {
-      if (minuendElement == subtrahendElement) {
-        exists = true;
-        break;
-      }
+struct VulkanBuffer {
+  CustomUniqPtr<VkBuffer_T> handle;
+  VmaAllocationInfo allocInfo;
+};
+
+struct VulkanDevice {
+  CustomUniqPtr<VkDevice_T> handle;
+  VkPhysicalDevice physical;
+  VkQueue graphics{}, presentation{};
+  uint32_t presentationFamilyIndex{};
+  uint32_t graphicsFamilyIndex{};
+  float maxAnisotropy{};
+
+  CustomUniqPtr<VkCommandPool_T> cmdPool;
+  CustomUniqPtr<VmaAllocator_T> allocator;
+  VulkanBuffer stagingBuffer;
+  VulkanBuffer camProjBuffer;
+};
+
+struct VulkanFrame {
+  CustomUniqPtr<VkSemaphore_T> imageAcquiredSem;
+  CustomUniqPtr<VkSemaphore_T> renderDoneSem;
+  CustomUniqPtr<VkFence_T> syncFence;
+  VkCommandBuffer gCmdBuf;
+  VkCommandBuffer pCmdBuf;
+};
+
+struct VulkanWindow {
+  Logs *logs{};
+  CustomUniqPtr<GLFWwindow> handle;
+  CustomUniqPtr<VkSurfaceKHR_T> surface;
+  CustomUniqPtr<VkSwapchainKHR_T> swapchain;
+  std::vector<CustomUniqPtr<VkImageView_T>> imageViews;
+  std::vector<VkImage> images;
+  std::vector<VulkanFrame> frames;
+  VkSurfaceFormatKHR surfaceFormat;
+  CustomUniqPtr<VkCommandPool_T> presentationCmdPool;
+  CustomUniqPtr<VkCommandPool_T> graphicsCmdPool;
+  CustomUniqPtr<VkImage_T> depthImage;
+  CustomUniqPtr<VkImageView_T> depthView;
+  uint32_t windowWidth, windowHeight; // Cached values
+  std::size_t frameIndex{};
+};
+
+struct PushConstants {
+  glm::mat4 model;
+  glm::mat4 view;
+};
+
+struct VulkanBackend;
+
+struct Texture {
+  Texture(VulkanBackend *const b) : backend{b} {}
+  VulkanBackend *backend{};
+  CustomUniqPtr<void> stbImagePtr;
+  unsigned width{}, height{}, channels{};
+  CustomUniqPtr<VkImage_T> image;
+  CustomUniqPtr<VkImageView_T> view;
+};
+
+struct VertexData {
+  glm::vec3 position;
+  float posPadding;
+  glm::vec2 texture;
+  glm::vec2 texPadding;
+  glm::vec3 normal;
+  float normPadding;
+  glm::vec4 color;
+};
+
+bool operator==(re::VertexData const &a, re::VertexData const &b) {
+  return a.position == b.position && a.texture == b.texture &&
+         a.normal == b.normal && a.color == b.color;
+}
+
+struct Object {
+  Object(VulkanBackend *const b, Texture const *const t)
+      : backend{b}, texture{t} {}
+  VulkanBackend *backend{};
+  Texture const *texture{};
+  std::vector<VertexData> vertices;
+  std::vector<unsigned> indices;
+  VulkanBuffer vertexBuffer;
+  VulkanBuffer indexBuffer;
+  CustomUniqPtr<VkDescriptorSet_T> descriptorSet;
+  VkPipelineLayout pipelineLayout{};
+  VkPipeline pipeline{};
+};
+
+struct ObjectInstance {
+  Object const *object;
+  glm::mat4 instance;
+};
+
+struct VulkanBackend {
+  VulkanBackend(Logs *const l) : logs{l} {}
+  Logs *logs{};
+
+  std::unique_ptr<BackendInfo> generalInfo;
+  std::unique_ptr<VulkanInstance> instance;
+  std::unique_ptr<VulkanDevice> device;
+  std::vector<VulkanWindow> windows;
+
+  CustomUniqPtr<VkDescriptorPool_T> descPool;
+  CustomUniqPtr<VkSampler_T> imageSampler;
+  VkDescriptorSet camProjDescSet;
+  CustomUniqPtr<VkDescriptorSetLayout_T> camProjDescSetLayout;
+  CustomUniqPtr<VkDescriptorSetLayout_T> samplerDescSetLayout;
+  CustomUniqPtr<VkPipelineLayout_T> pipelineNoSamplerLayout;
+  CustomUniqPtr<VkPipelineLayout_T> pipelineSamplerLayout;
+  CustomUniqPtr<VkPipeline_T> pipelineNoSampler;
+  CustomUniqPtr<VkPipeline_T> pipelineSampler;
+
+  std::vector<CustomUniqPtr<Texture>> textures;
+  std::vector<CustomUniqPtr<Object>> objects;
+  PushConstants constants;
+  glm::mat4 camProjection;
+
+  std::vector<ObjectInstance> objectsToRender;
+  CustomUniqPtr<void> resourceUsageDoneGuard;
+};
+} // namespace re
+
+namespace re {
+bool createBuffer(VulkanBackend *const backend,
+                  VkDeviceSize const bufferSize,
+                  VkBufferUsageFlags const bufferUsage,
+                  VmaAllocationCreateFlags const allocFlags,
+                  CustomUniqPtr<VkBuffer_T> *const out,
+                  VmaAllocation *const outAlloc);
+
+bool createStagingBuffer(VulkanBackend *const backend,
+                         VkDeviceSize const bufferSize,
+                         VkBufferUsageFlags const bufferUsage,
+                         CustomUniqPtr<VkBuffer_T> *const outBuf,
+                         VmaAllocation *const outAlloc);
+
+void addErrMsg(VulkanBackend const *const handle,
+               std::string const &tag,
+               std::string const &msg,
+               VkResult const r);
+
+bool addVertex(Object *const handle,
+               glm::vec3 const &position,
+               glm::vec2 const &texCoord,
+               glm::vec3 const &normal,
+               glm::vec4 const &color) {
+  if (!handle)
+    return false;
+
+  handle->vertices.push_back(VertexData{});
+  auto &data = handle->vertices.back();
+  data.position = position;
+  data.texture = texCoord;
+  data.normal = normal;
+  data.color = color;
+  return true;
+}
+
+bool setIndices(Object *const handle, std::vector<uint32_t> indices) {
+  if (!handle)
+    return false;
+  handle->indices = std::move(indices);
+  return true;
+}
+
+bool stage(VulkanBackend *const handle,
+           Object const *const object,
+           glm::mat4 const &instance) {
+  if (!handle)
+    return false;
+
+  if (!object) {
+    addErrMsg(handle->logs, __func__, "The object handle = nullptr");
+    return false;
+  }
+
+  handle->objectsToRender.push_back({object, instance});
+  return true;
+}
+
+bool submitDrawCalls(VulkanBackend *const backend, VulkanWindow *const window) {
+
+  auto const &frame = window->frames[window->frameIndex];
+  auto const renderDone = frame.renderDoneSem.get();
+  auto const acquireDone = frame.imageAcquiredSem.get();
+
+  VkSubmitInfo2 submitInfo{};
+  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+
+  submitInfo.commandBufferInfoCount = 1;
+  VkCommandBufferSubmitInfo cbsi{};
+  cbsi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+  cbsi.commandBuffer = frame.gCmdBuf;
+  submitInfo.pCommandBufferInfos = &cbsi;
+
+  submitInfo.waitSemaphoreInfoCount = 1;
+  VkSemaphoreSubmitInfo wsi{};
+  wsi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+  wsi.semaphore = acquireDone;
+  wsi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  submitInfo.pWaitSemaphoreInfos = &wsi;
+
+  submitInfo.signalSemaphoreInfoCount = 1;
+  VkSemaphoreSubmitInfo ssi{};
+  ssi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+  ssi.semaphore = renderDone;
+  ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  submitInfo.pSignalSemaphoreInfos = &ssi;
+
+  auto const fence = window->frames[window->frameIndex].syncFence.get();
+  auto r = vkQueueSubmit2(backend->device->graphics, 1, &submitInfo, fence);
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to submit commands", r);
+    return false;
+  }
+  return true;
+}
+
+bool present(VulkanBackend *const backend,
+             VulkanWindow *const window,
+             uint32_t const imageIndex) {
+  if (!backend)
+    return false;
+
+  auto const &frame = window->frames[window->frameIndex];
+  auto const renderDone = frame.renderDoneSem.get();
+  auto const swp = window->swapchain.get();
+
+  VkPresentInfoKHR presentInfo{};
+  presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  presentInfo.waitSemaphoreCount = 1;
+  presentInfo.pWaitSemaphores = &renderDone;
+  presentInfo.swapchainCount = 1;
+  presentInfo.pSwapchains = &swp;
+  presentInfo.pImageIndices = &imageIndex;
+
+  auto r = vkQueuePresentKHR(backend->device->presentation, &presentInfo);
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to queue presentation", r);
+    return false;
+  }
+
+  return true;
+}
+
+bool setupRenderingInfo(VulkanWindow *const window,
+                        VkRenderingInfo *const renderingInfo,
+                        VkRenderingAttachmentInfo *const color,
+                        VkRenderingAttachmentInfo *const depth,
+                        uint32_t const imageIndex) {
+
+  *color = VkRenderingAttachmentInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .pNext = 0,
+      .imageView = window->imageViews[imageIndex].get(),
+      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+      .resolveMode = {},
+      .resolveImageView = {},
+      .resolveImageLayout = {},
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = {.color = VkClearColorValue{.float32{0.f, 0.f, 0.f, 1.f}}}};
+
+  *depth = VkRenderingAttachmentInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .pNext = 0,
+      .imageView = window->depthView.get(),
+      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+      .resolveMode = {},
+      .resolveImageView = {},
+      .resolveImageLayout = {},
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = {.depthStencil =
+                         VkClearDepthStencilValue{.depth = 1.f, .stencil = 0}}};
+
+  renderingInfo->sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+  renderingInfo->renderArea = {{0, 0},
+                               {window->windowWidth, window->windowHeight}};
+  renderingInfo->layerCount = 1;
+  renderingInfo->colorAttachmentCount = 1;
+  renderingInfo->pColorAttachments = color;
+  renderingInfo->pDepthAttachment = depth;
+  return true;
+}
+
+bool getNextImage(VulkanBackend *const backend,
+                  VulkanWindow *const window,
+                  uint32_t *const imgIndex) {
+  if (!backend)
+    return false;
+
+  auto const &frame = window->frames[window->frameIndex];
+  auto const acquireDone = frame.imageAcquiredSem.get();
+  auto const swp = window->swapchain.get();
+  auto const dev = backend->device->handle.get();
+
+  uint32_t img{};
+  auto r = vkAcquireNextImageKHR(dev, swp, UINT64_MAX, acquireDone, 0, &img);
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Fetching swapchain image failed", r);
+    return false;
+  }
+
+  *imgIndex = img;
+  return true;
+}
+
+bool setRenderBarriers(VulkanBackend *const backend,
+                       VkCommandBuffer const cmd,
+                       VkImage const image) {
+  if (!backend)
+    return false;
+
+  VkImageMemoryBarrier2 barrier{}, barrier2{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  barrier.image = image;
+  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  barrier2 = barrier;
+  VkDependencyInfo depInfo{};
+  depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+  depInfo.imageMemoryBarrierCount = 1;
+  VkImageMemoryBarrier2 barriers[] = {barrier, barrier2};
+  depInfo.pImageMemoryBarriers = barriers;
+
+  barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+  barrier.srcAccessMask = VK_ACCESS_2_NONE;
+  barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+
+  barrier2.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  barrier2.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier2.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+  barrier2.dstAccessMask = VK_ACCESS_2_NONE;
+  barrier2.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+  barrier2.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+  vkCmdPipelineBarrier2(cmd, &depInfo);
+  return true;
+}
+
+bool render(VulkanBackend *const backend, VulkanWindow *const window) {
+  if (!backend)
+    return false;
+  if (!window) {
+    addErrMsg(backend->logs, __func__, "The window handle = nullptr");
+    return false;
+  }
+
+  VkCommandBuffer const cmd = window->frames[window->frameIndex].gCmdBuf;
+  auto const fence = window->frames[window->frameIndex].syncFence.get();
+  auto const dev = backend->device->handle.get();
+
+  vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+  vkResetFences(dev, 1, &fence);
+
+  uint32_t img{};
+  if (!getNextImage(backend, window, &img)) {
+    addErrMsg(backend->logs, __func__, "Failed to acquire image");
+    return false;
+  }
+
+  VkCommandBufferBeginInfo cbi{};
+  cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  auto r = vkBeginCommandBuffer(cmd, &cbi);
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend->logs, __func__, "Failed to begin command buffer");
+    return false;
+  }
+
+  if (!setRenderBarriers(backend, cmd, window->images[img])) {
+    addErrMsg(backend->logs, __func__, "Failed to set memory barriers");
+    return false;
+  }
+
+  VkRenderingAttachmentInfo colorAttachment{};
+  VkRenderingAttachmentInfo depthAttachment{};
+  VkRenderingInfo renderingInfo{};
+
+  if (!setupRenderingInfo(
+          window, &renderingInfo, &colorAttachment, &depthAttachment, img)) {
+    addErrMsg(backend->logs, __func__, "Failed to setup rendering info");
+    return false;
+  }
+
+  vkCmdBeginRendering(cmd, &renderingInfo);
+
+  VkViewport const vp{.x = 0,
+                      .y = 0,
+                      .width = float(window->windowWidth),
+                      .height = float(window->windowHeight),
+                      .minDepth = 0.f,
+                      .maxDepth = 1.f};
+  vkCmdSetViewportWithCount(cmd, 1, &vp);
+
+  VkRect2D const sc{.offset = {0, 0},
+                    .extent = {window->windowWidth, window->windowHeight}};
+  vkCmdSetScissorWithCount(cmd, 1, &sc);
+
+  for (auto const &obj : backend->objectsToRender) {
+    if (!obj.object->indices.size() || !obj.object->vertices.size())
+      continue;
+
+    vkCmdBindPipeline(
+        cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, obj.object->pipeline);
+
+    if (obj.object->descriptorSet.get()) {
+      VkDescriptorSet const descSets[] = {backend->camProjDescSet,
+                                          obj.object->descriptorSet.get()};
+      vkCmdBindDescriptorSets(cmd,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              obj.object->pipelineLayout,
+                              0,
+                              sizeof(descSets) / sizeof(descSets[0]),
+                              descSets,
+                              0,
+                              0);
+    } else {
+      VkDescriptorSet const descSets[] = {backend->camProjDescSet};
+      vkCmdBindDescriptorSets(cmd,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              obj.object->pipelineLayout,
+                              0,
+                              sizeof(descSets) / sizeof(descSets[0]),
+                              descSets,
+                              0,
+                              0);
     }
 
-    if (!exists)
-      difference.push_back(minuendElement);
+    backend->constants.model = obj.instance;
+    vkCmdPushConstants(cmd,
+                       obj.object->pipelineLayout,
+                       VK_SHADER_STAGE_VERTEX_BIT,
+                       0,
+                       sizeof(PushConstants),
+                       &backend->constants);
+
+    auto const vertexBuf = obj.object->vertexBuffer.handle.get();
+    VkDeviceSize const offsets[] = {0};
+    vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuf, offsets);
+
+    auto const indexBuf = obj.object->indexBuffer.handle.get();
+    vkCmdBindIndexBuffer(cmd, indexBuf, 0, VK_INDEX_TYPE_UINT32);
+
+    vkCmdDrawIndexed(cmd, obj.object->indices.size(), 1, 0, 0, 0);
   }
 
-  return difference;
-}
+  vkCmdEndRendering(cmd);
+  vkEndCommandBuffer(cmd);
 
-bool getInstanceBuffer(VulkanBackend *const backend,
-                       UniqueRes<VkBuffer_T> **const p) {
-  *p = &backend->instanceBuf;
-  return true;
-}
-
-bool getIndexBuffer(VulkanBackend *const backend,
-                    UniqueRes<VkBuffer_T> **const p) {
-  *p = &backend->indexBuf;
-  return true;
-}
-
-bool getVertexBuffer(VulkanBackend *const backend,
-                     UniqueRes<VkBuffer_T> **const p) {
-  *p = &backend->vertexBuf;
-  return true;
-}
-
-bool setResolution(Window *const handle, unsigned const w, unsigned const h) {
-  if (!handle)
-    return false;
-  handle->width = w;
-  handle->height = h;
-  return true;
-}
-
-bool createWindow(VulkanBackend *const backend,
-                  uint32_t const width,
-                  uint32_t const height);
-
-bool open(Window *const window, VulkanBackend *const vk) {
-  if (!window)
-    return false;
-
-  if (window->handle) {
-    glfwShowWindow(window->handle.get());
-    return true;
-  }
-
-  return createWindow(vk, window->width, window->height);
-}
-
-void addErrMsg(Window const *const window,
-               std::string const &msg,
-               VkResult const r) {
-  addErrMsg(window->logs, msg, r);
-}
-
-bool getVulkanInstance(VulkanBackend const *const backend,
-                       VkInstance *const p) {
-  *p = backend->instance->handle.get();
-  return true;
-}
-
-bool getPhysicalDevice(VulkanBackend const *const backend,
-                       VkPhysicalDevice *const p) {
-  *p = backend->device->identifier;
-  return true;
-}
-
-bool getLogicalDevice(VulkanBackend const *const backend, VkDevice *const p) {
-  *p = backend->device->handle.get();
-  return true;
-}
-
-bool getMemoryAllocator(VulkanBackend const *const backend,
-                        VmaAllocator *const p) {
-  *p = backend->allocator.get();
-  return true;
-}
-
-bool getCommandPool(VulkanBackend const *const backend,
-                    VkCommandPool *const p) {
-  *p = backend->graphicsCmdPool.get();
-  return true;
-}
-
-bool getVulkanFence(VulkanBackend const *const backend, VkFence *const p) {
-  *p = backend->window->fence.get();
-  return true;
-}
-
-bool getGraphicsQueue(VulkanBackend const *const backend, VkQueue *const p) {
-  *p = backend->device->graphics;
-  return true;
-}
-
-bool getVertexBuffer(VulkanBackend const *const backend, VkBuffer *const p) {
-  *p = backend->vertexBuf.get();
-  return true;
-}
-
-bool getVersionOfAPI(VulkanBackend const *const handle, uint32_t *const p) {
-  *p = handle->VULKAN_API_VERSION;
-  return true;
-}
-
-bool getIndexBuffer(VulkanBackend const *const backend, VkBuffer *const p) {
-  *p = backend->indexBuf.get();
-  return true;
-}
-
-bool getInstanceBuffer(VulkanBackend const *const backend, VkBuffer *const p) {
-  *p = backend->instanceBuf.get();
-  return true;
-}
-
-void addErrMsg(VulkanBackend const *const backend,
-               std::string const &msg,
-               VkResult r) {
-  addErrMsg(backend->logs, msg, r);
-}
-
-bool setPosition(Vertex *const handle, glm::vec3 *const p) {
-  handle->position = *p;
-  return true;
-}
-
-bool setColor(Vertex *const handle, glm::vec4 *const p) {
-  handle->color = *p;
-  return true;
-}
-
-bool getPosition(Vertex const *const handle, glm::vec3 *const p) {
-  *p = handle->position;
-  return true;
-}
-
-bool getColor(Vertex const *const handle, glm::vec4 *const p) {
-  *p = handle->color;
-  return true;
-}
-
-bool close(Window const *const window) {
-  auto handle = window->handle.get();
-  glfwSetWindowShouldClose(handle, VK_TRUE);
-  return true;
-}
-
-bool setApplicationName(VulkanBackend *const handle, char const *const p) {
-  if (!handle || !p)
-    return false;
-  handle->appName = std::string{p};
-  return true;
-}
-
-void setValidationLayersOn(VulkanBackend *const handle) {
-  if (!handle)
-    return;
-  handle->validation = true;
-}
-
-bool createWindow(VulkanBackend *const backend,
-                  uint32_t const width,
-                  uint32_t const height) {
-  if (!backend->window)
-    backend->window = std::make_unique<Window>();
-  if (!createGLFWindow(backend, width, height)) {
-    addErrMsg(backend, "createWindow: Failed to create GLFW window");
+  if (!submitDrawCalls(backend, window)) {
+    addErrMsg(backend->logs, __func__, "Failed to submit draw calls");
     return false;
   }
 
-  if (!createWindowSurface(backend)) {
-    addErrMsg(backend, "createWindow: Failed to create window surface");
+  if (!present(backend, window, img)) {
+    addErrMsg(backend->logs, __func__, "Failed to present image");
     return false;
   }
 
-  if (!queryPresentModes(backend)) {
-    addErrMsg(backend, "createWindow: Failed to query present modes");
-    return false;
-  }
-
-  if (!isPresentModeAvailable(backend)) {
-    addErrMsg(backend, "createWindow: Requested present mode is not available");
-    return false;
-  }
-
-  if (!checkSurfaceEligibility(backend)) {
-    addErrMsg(backend, "createWindow: The surface is not eligible");
-    return false;
-  }
-
-  if (!createWindowFence(backend)) {
-    addErrMsg(backend, "createWindow: Failed to create window fence");
-    return false;
-  }
-
-  if (!createWindowSwapchain(backend)) {
-    addErrMsg(backend, "createWindow: Failed to create swapchain");
-    return false;
-  }
-
-  if (!fetchSwapchainImages(backend)) {
-    addErrMsg(backend, "createWindow: Failed to fetch swapchain images");
-    return false;
-  }
-
-  if (!createDepthAttachment(backend)) {
-    addErrMsg(backend, "createWindow: Failed to create depth attachment");
-    return false;
-  }
-
-  if (!allocateCommandBuffers(backend)) {
-    addErrMsg(backend, "createWindow: Failed to allocate command buffers");
-    return false;
-  }
-
-  if (!transitionSwapchainImages(backend)) {
-    addErrMsg(backend, "createWindow: Failed to transition swapchain images");
-    return false;
-  }
-
-  if (!createSwapchainImageViews(backend)) {
-    addErrMsg(backend, "createWindow: Failed to create swapchain image views");
-    return false;
-  }
-
-  if (!createWindowSemaphores(backend)) {
-    addErrMsg(backend, "createWindow: Failed to create window semaphores");
-    return false;
-  }
-
-  if (!createPipelineLayout(backend)) {
-    addErrMsg(backend, "createWindow: Failed to create pipeline layout");
-    return false;
-  }
-
-  if (!createGraphicsPipeline(backend)) {
-    addErrMsg(backend, "createWindow: Failed to create graphics pipeline");
-    return false;
-  }
-
+  window->frameIndex = ++window->frameIndex % window->frames.size();
+  backend->objectsToRender.clear();
   return true;
 }
 
-bool createDepthAttachment(VulkanBackend *const backend) {
-  UniqueRes<VkImage_T> img{};
-  if (!createDepthImage(
-          backend, backend->window->width, backend->window->height, &img)) {
-    addErrMsg(backend, "createDepthAttachment: Failed to create depth image");
+bool createShaderModule(VulkanBackend *const backend,
+                        std::string const &spirvFile,
+                        CustomUniqPtr<VkShaderModule_T> *const out) {
+  if (!backend)
+    return false;
+
+  if (!out) {
+    addErrMsg(backend->logs, __func__, "The parameter 'out' = nullptr");
     return false;
   }
 
-  VkImageViewCreateInfo info{};
-  info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  info.image = img.get();
-  info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  info.components = VkComponentMapping{.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                                       .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                                       .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                                       .a = VK_COMPONENT_SWIZZLE_IDENTITY};
-  info.subresourceRange = {
-      .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-      .baseMipLevel = 0,
-      .levelCount = 1,
-      .baseArrayLayer = 0,
-      .layerCount = 1,
-  };
+  std::ifstream in{spirvFile, std::ios::ate | std::ios::binary};
+  std::vector<uint32_t> byteCode{};
 
-  info.format = VK_FORMAT_D32_SFLOAT;
+  if (!in.is_open()) {
+    addErrMsg(backend->logs,
+              __func__,
+              "Failed to open shader module byte code file: " + spirvFile);
+    return false;
+  }
+
+  if (!backend->device) {
+    addErrMsg(backend->logs, __func__, "Device not initialized");
+    return false;
+  }
 
   auto const dev = backend->device->handle.get();
-  VkImageView handle{};
-  if (auto r = vkCreateImageView(dev, &info, 0, &handle); r != VK_SUCCESS) {
-    addErrMsg(
-        backend, "createDepthAttachment: Failed to create depth image view", r);
+  if (!dev) {
+    addErrMsg(backend->logs, __func__, "Device not initialized");
     return false;
   }
 
-  backend->window->depthImg = std::move(img);
-  backend->window->depthImgView = {
-      handle, [dev](VkImageView_T *const p) { vkDestroyImageView(dev, p, 0); }};
+  std::size_t const dataSize = in.tellg(); // In bytes
+  byteCode.resize(dataSize / sizeof(uint32_t));
+  in.seekg(0);
+  in.read(reinterpret_cast<char *>(byteCode.data()), dataSize);
 
+  VkShaderModuleCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  info.codeSize = dataSize;
+  info.pCode = byteCode.data();
+  VkShaderModule shader{};
+  auto result = vkCreateShaderModule(dev, &info, 0, &shader);
+
+  if (result != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to create shader module", result);
+    return false;
+  }
+
+  *out = {shader, [dev](VkShaderModule_T *const p) {
+            vkDestroyShaderModule(dev, p, 0);
+          }};
+
+  return true;
+}
+
+void getPosition(tinyobj::attrib_t const *const attrib,
+                 tinyobj::index_t const *const idx,
+                 VertexData *const vertex) {
+  if (!attrib || !idx || !vertex)
+    return;
+
+  vertex->position =
+      glm::vec3(attrib->vertices[3 * size_t(idx->vertex_index) + 0],
+                attrib->vertices[3 * size_t(idx->vertex_index) + 1],
+                attrib->vertices[3 * size_t(idx->vertex_index) + 2]);
+}
+
+void getNormal(tinyobj::attrib_t const *const attrib,
+               tinyobj::index_t const *const idx,
+               VertexData *const vertex) {
+  if (!attrib || !idx || !vertex)
+    return;
+
+  if (idx->normal_index < 0) {
+    vertex->normal = glm::vec3(0.f, 0.f, 1.f);
+    return;
+  }
+
+  vertex->normal =
+      glm::vec3(attrib->normals[3 * size_t(idx->normal_index) + 0],
+                attrib->normals[3 * size_t(idx->normal_index) + 1],
+                attrib->normals[3 * size_t(idx->normal_index) + 2]);
+}
+
+void getTexture(tinyobj::attrib_t const *const attrib,
+                tinyobj::index_t const *const idx,
+                VertexData *const vertex) {
+  if (!attrib || !idx || !vertex)
+    return;
+
+  if (idx->texcoord_index < 0) {
+    vertex->texture = glm::vec2(0.f, 0.f);
+    return;
+  }
+
+  vertex->texture =
+      glm::vec2(attrib->texcoords[2 * size_t(idx->texcoord_index) + 0],
+                attrib->texcoords[2 * size_t(idx->texcoord_index) + 1]);
+}
+
+void getColor(const tinyobj::attrib_t *attrib,
+              const tinyobj::index_t *idx,
+              VertexData *vertex) {
+  if (!attrib || !idx || !vertex)
+    return;
+
+  size_t i = 3 * size_t(idx->vertex_index);
+
+  if (idx->vertex_index < 0 || attrib->colors.size() < i + 3) {
+    vertex->color = glm::vec4(1.0f); // default white
+    return;
+  }
+
+  vertex->color = glm::vec4(attrib->colors[i + 0],
+                            attrib->colors[i + 1],
+                            attrib->colors[i + 2],
+                            1.0f);
+}
+
+bool prepareToLoadFromFile(Object *const handle,
+                           char const *const p,
+                           tinyobj::ObjReaderConfig *const reader_config,
+                           tinyobj::ObjReader *const reader) {
+  if (!handle || !handle->backend)
+    return false;
+
+  if (!p) {
+    addErrMsg(
+        handle->backend->logs, __func__, "The file path handle = nullptr");
+    return false;
+  }
+
+  if (!reader_config) {
+    addErrMsg(
+        handle->backend->logs, __func__, "The reader config handle = nullptr");
+    return false;
+  }
+
+  if (!reader) {
+    addErrMsg(handle->backend->logs, __func__, "The reader handle = nullptr");
+    return false;
+  }
+
+  namespace fs = std::filesystem;
+  std::string const filePath{p};
+
+  reader_config->mtl_search_path = fs::path(filePath).parent_path().string();
+  reader_config->triangulate = true;
+
+  if (!reader->ParseFromFile(filePath, *reader_config)) {
+    if (!reader->Error().empty()) {
+      std::string err = reader->Error();
+      err.pop_back();
+      addErrMsg(handle->backend->logs, __func__, "TinyObjReader: " + err);
+    }
+
+    else
+      addErrMsg(
+          handle->backend->logs, __func__, "Failed to load object from file");
+    return false;
+  }
+
+  if (!reader->Warning().empty()) {
+    std::istringstream wrn{reader->Warning()};
+    std::string tmp{};
+    while (std::getline(wrn, tmp))
+      addWrnMsg(handle->backend->logs, __func__, "TinyObjReader: " + tmp);
+  }
+
+  return true;
+}
+} // namespace re
+
+namespace std {
+template <> struct hash<re::VertexData> {
+  size_t operator()(const re::VertexData &v) const {
+    size_t h = 0;
+    auto combine = [](size_t lhs, size_t rhs) {
+      return lhs ^ (rhs + 0x9e3779b9 + (lhs << 6) + (lhs >> 2));
+    };
+
+    h = combine(h, hash<float>()(v.position.x));
+    h = combine(h, hash<float>()(v.position.y));
+    h = combine(h, hash<float>()(v.position.z));
+
+    h = combine(h, hash<float>()(v.normal.x));
+    h = combine(h, hash<float>()(v.normal.y));
+    h = combine(h, hash<float>()(v.normal.z));
+
+    h = combine(h, hash<float>()(v.texture.x));
+    h = combine(h, hash<float>()(v.texture.y));
+
+    h = combine(h, hash<float>()(v.color.r));
+    h = combine(h, hash<float>()(v.color.g));
+    h = combine(h, hash<float>()(v.color.b));
+    h = combine(h, hash<float>()(v.color.a));
+
+    return h;
+  }
+};
+} // namespace std
+
+namespace re {
+bool createDescriptorPoolAndLayouts(VulkanBackend *const backend) {
+  auto const dev = backend->device->handle.get();
+
+  VkDescriptorPoolCreateInfo poolInfo{};
+  poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+  poolInfo.maxSets = 100;
+
+  VkDescriptorPoolSize poolSizes[] = {
+      {.type = VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = 1000},
+      {.type = VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1000}};
+
+  poolInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
+  poolInfo.pPoolSizes = poolSizes;
+
+  VkDescriptorPool pool{};
+  auto r = vkCreateDescriptorPool(dev, &poolInfo, 0, &pool);
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to create descriptor pool", r);
+    return false;
+  }
+
+  backend->descPool = {pool, [dev](VkDescriptorPool_T *const p) {
+                         vkDeviceWaitIdle(dev);
+                         vkDestroyDescriptorPool(dev, p, 0);
+                       }};
+
+  VkDescriptorSetLayoutCreateInfo descInfo{};
+  descInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+
+  VkDescriptorSetLayoutBinding bindings[] = {
+      {.binding = 0,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+       .pImmutableSamplers = 0}};
+
+  descInfo.bindingCount = sizeof(bindings) / sizeof(bindings[0]);
+  descInfo.pBindings = bindings;
+
+  VkDescriptorSetLayout descLayout{};
+  r = vkCreateDescriptorSetLayout(dev, &descInfo, 0, &descLayout);
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to create proj desc set layout", r);
+    return false;
+  }
+  backend->camProjDescSetLayout = {descLayout,
+                                   [dev](VkDescriptorSetLayout_T *const p) {
+                                     vkDestroyDescriptorSetLayout(dev, p, 0);
+                                   }};
+
+  bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  r = vkCreateDescriptorSetLayout(dev, &descInfo, 0, &descLayout);
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to create sampler desc set layout", r);
+    return false;
+  }
+  backend->samplerDescSetLayout = {descLayout,
+                                   [dev](VkDescriptorSetLayout_T *const p) {
+                                     vkDestroyDescriptorSetLayout(dev, p, 0);
+                                   }};
+
+  VkDescriptorSetAllocateInfo descAlloc{};
+  descAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  descAlloc.descriptorPool = backend->descPool.get();
+  descAlloc.descriptorSetCount = 1;
+  auto const camProj = backend->camProjDescSetLayout.get();
+  descAlloc.pSetLayouts = &camProj;
+
+  VkDescriptorSet descriptor{};
+  r = vkAllocateDescriptorSets(dev, &descAlloc, &descriptor);
+
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to allocate descriptor set", r);
+    return false;
+  }
+  backend->camProjDescSet = descriptor;
+
+  VkDescriptorBufferInfo bufInf{};
+  bufInf.buffer = backend->device->camProjBuffer.handle.get();
+  bufInf.range = sizeof(glm::mat4);
+  bufInf.offset = 0;
+
+  VkWriteDescriptorSet descriptorWrite = {};
+  descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  descriptorWrite.dstSet = backend->camProjDescSet;
+  descriptorWrite.dstBinding = 0;
+  descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  descriptorWrite.descriptorCount = 1;
+  descriptorWrite.pBufferInfo = &bufInf;
+  descriptorWrite.dstArrayElement = 0;
+  vkUpdateDescriptorSets(dev, 1, &descriptorWrite, 0, nullptr);
   return true;
 }
 
 bool createGraphicsPipeline(VulkanBackend *const backend) {
-  UniqueRes<VkShaderModule_T> vertex{}, fragment{};
+  CustomUniqPtr<VkShaderModule_T> vertex{}, fragment{}, fragNoSampler{};
   if (!createShaderModule(backend, "shaders/vertex.spv", &vertex)) {
-    addErrMsg(backend,
-              "createGraphicsPipeline: Failed to create vertex shader");
+    addErrMsg(backend->logs, __func__, "Failed to create vertex shader");
     return false;
   }
 
   if (!createShaderModule(backend, "shaders/fragment.spv", &fragment)) {
-    addErrMsg(backend,
-              "createGraphicsPipeline: Failed to create fragment shader");
+    addErrMsg(backend->logs, __func__, "Failed to create fragment shader");
+    return false;
+  }
+
+  if (!createShaderModule(
+          backend, "shaders/fragNoSampler.spv", &fragNoSampler)) {
+    addErrMsg(
+        backend->logs, __func__, "Failed to create fragment no sampler shader");
     return false;
   }
 
@@ -348,25 +861,48 @@ bool createGraphicsPipeline(VulkanBackend *const backend) {
        .pNext = 0,
        .flags = 0,
        .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-       .module = fragment.get(),
+       .module = fragNoSampler.get(),
        .pName = "main",
        .pSpecializationInfo = 0}};
 
   VkPipelineVertexInputStateCreateInfo vertexInputState{};
   vertexInputState.sType =
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  auto const attribDesc = Vertex::attributeDescription();
-  vertexInputState.pVertexAttributeDescriptions = attribDesc.data();
-  vertexInputState.vertexAttributeDescriptionCount = attribDesc.size();
-  auto const bindDesc = Vertex::bindingDescription();
-  vertexInputState.pVertexBindingDescriptions = &bindDesc;
-  vertexInputState.vertexBindingDescriptionCount = 1;
+  VkVertexInputAttributeDescription const attribDesc[] = {
+      {.location = 0,
+       .binding = 0,
+       .format = VK_FORMAT_R32G32B32_SFLOAT,
+       .offset = offsetof(VertexData, position)},
+      {.location = 1,
+       .binding = 0,
+       .format = VK_FORMAT_R32G32_SFLOAT,
+       .offset = offsetof(VertexData, texture)},
+      {.location = 2,
+       .binding = 0,
+       .format = VK_FORMAT_R32G32B32_SFLOAT,
+       .offset = offsetof(VertexData, normal)},
+      {.location = 3,
+       .binding = 0,
+       .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+       .offset = offsetof(VertexData, color)},
+  };
+  vertexInputState.pVertexAttributeDescriptions = attribDesc;
+  vertexInputState.vertexAttributeDescriptionCount =
+      sizeof(attribDesc) / sizeof(attribDesc[0]);
+
+  VkVertexInputBindingDescription const bindDesc[] = {
+      {.binding = 0,
+       .stride = sizeof(VertexData),
+       .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
+  vertexInputState.pVertexBindingDescriptions = bindDesc;
+  vertexInputState.vertexBindingDescriptionCount =
+      sizeof(bindDesc) / sizeof(bindDesc[0]);
 
   VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{};
   inputAssemblyState.sType =
       VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
   inputAssemblyState.primitiveRestartEnable = VK_FALSE;
-  inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+  inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
   VkPipelineRasterizationStateCreateInfo rasterizationState{};
   rasterizationState.sType =
@@ -376,7 +912,7 @@ bool createGraphicsPipeline(VulkanBackend *const backend) {
   rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
   rasterizationState.lineWidth = 1.0f;
   rasterizationState.cullMode = VK_CULL_MODE_NONE;
-  rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
+  rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rasterizationState.depthBiasEnable = VK_FALSE;
 
   VkPipelineMultisampleStateCreateInfo multisampleState{};
@@ -408,7 +944,7 @@ bool createGraphicsPipeline(VulkanBackend *const backend) {
   VkPipelineColorBlendStateCreateInfo colorBlendState{};
   colorBlendState.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  colorBlendState.logicOpEnable = VK_TRUE;
+  colorBlendState.logicOpEnable = VK_FALSE;
   colorBlendState.logicOp = VK_LOGIC_OP_COPY;
   colorBlendState.attachmentCount = 1;
   colorBlendState.pAttachments = &colorBlendAttachment;
@@ -432,10 +968,10 @@ bool createGraphicsPipeline(VulkanBackend *const backend) {
   VkPipelineRenderingCreateInfo nextInfo{};
   nextInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
   nextInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
-  nextInfo.colorAttachmentCount = 1;
 
-  VkFormat formats[] = {backend->window->surfaceFormat.format};
+  VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM};
   nextInfo.pColorAttachmentFormats = formats;
+  nextInfo.colorAttachmentCount = 1;
 
   VkGraphicsPipelineCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -450,179 +986,845 @@ bool createGraphicsPipeline(VulkanBackend *const backend) {
   info.pDepthStencilState = &depthStencilState;
   info.pColorBlendState = &colorBlendState;
   info.pDynamicState = &dynamicState;
-  info.layout =
-      backend->pipelineLayouts[backend->window->activePipelineLayout].get();
   info.basePipelineHandle = VK_NULL_HANDLE;
   info.basePipelineIndex = 0;
 
   auto const dev = backend->device->handle.get();
   VkPipeline handle{VK_NULL_HANDLE};
+
+  info.layout = backend->pipelineNoSamplerLayout.get();
   auto r = vkCreateGraphicsPipelines(dev, 0, 1, &info, 0, &handle);
   if (r != VK_SUCCESS) {
-    addErrMsg(backend,
-              "createGraphicsPipeline: Failed to create graphics pipeline",
-              r);
+    addErrMsg(backend, __func__, "Failed to create graphics pipeline", r);
+    return false;
+  }
+  backend->pipelineNoSampler = {
+      handle, [dev](VkPipeline_T *const p) { vkDestroyPipeline(dev, p, 0); }};
+
+  info.layout = backend->pipelineSamplerLayout.get();
+  stages[1].module = fragment.get();
+  r = vkCreateGraphicsPipelines(dev, 0, 1, &info, 0, &handle);
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to create graphics pipeline", r);
     return false;
   }
 
-  backend->window->activePipeline = backend->pipelines.size();
-  backend->pipelines.push_back(UniqueRes<VkPipeline_T>{
-      handle, [dev](VkPipeline_T *const p) { vkDestroyPipeline(dev, p, 0); }});
+  backend->pipelineSampler = {
+      handle, [dev](VkPipeline_T *const p) { vkDestroyPipeline(dev, p, 0); }};
   return true;
 }
 
-bool createPipelineLayout(VulkanBackend *const backend) {
+bool createPipelineLayouts(VulkanBackend *const backend) {
   VkPipelineLayoutCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  VkDescriptorSetLayout layouts[] = {{}};
-  info.pSetLayouts = layouts;
-  info.setLayoutCount = 0;
+
   VkPushConstantRange ranges[] = {
       VkPushConstantRange{.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
                           .offset = 0,
-                          .size = sizeof(backend->camMats)}};
+                          .size = sizeof(backend->constants)}};
   info.pushConstantRangeCount = sizeof(ranges) / sizeof(ranges[0]);
   info.pPushConstantRanges = ranges;
 
-  auto const descLayout = backend->descLayout.get();
-  info.pSetLayouts = &descLayout;
-  info.setLayoutCount = 1;
-
   auto const dev = backend->device->handle.get();
   VkPipelineLayout handle{};
-  auto result = vkCreatePipelineLayout(dev, &info, 0, &handle);
 
-  if (result != VK_SUCCESS) {
-    addErrMsg(backend,
-              "createPipelineLayout: Failed to create pipeline layout",
-              result);
-    return false;
+  { // This is the simple, no sampler variant
+    VkDescriptorSetLayout layouts[] = {backend->camProjDescSetLayout.get()};
+    info.pSetLayouts = layouts;
+    info.setLayoutCount = sizeof(layouts) / sizeof(layouts[0]);
+    auto result = vkCreatePipelineLayout(dev, &info, 0, &handle);
+
+    if (result != VK_SUCCESS) {
+      addErrMsg(backend, __func__, "Failed to create pipeline layout", result);
+      return false;
+    }
+
+    backend->pipelineNoSamplerLayout = {handle,
+                                        [dev](VkPipelineLayout_T *const p) {
+                                          vkDestroyPipelineLayout(dev, p, 0);
+                                        }};
   }
 
-  backend->window->activePipelineLayout = backend->pipelineLayouts.size();
-  backend->pipelineLayouts.push_back(
-      {handle, [dev](VkPipelineLayout_T *const p) {
-         vkDestroyPipelineLayout(dev, p, 0);
-       }});
+  { // This is the sampler variant
+    VkDescriptorSetLayout layouts[] = {backend->camProjDescSetLayout.get(),
+                                       backend->samplerDescSetLayout.get()};
+    info.pSetLayouts = layouts;
+    info.setLayoutCount = sizeof(layouts) / sizeof(layouts[0]);
+    auto result = vkCreatePipelineLayout(dev, &info, 0, &handle);
 
+    if (result != VK_SUCCESS) {
+      addErrMsg(backend, __func__, "Failed to create pipeline layout", result);
+      return false;
+    }
+
+    backend->pipelineSamplerLayout = {handle,
+                                      [dev](VkPipelineLayout_T *const p) {
+                                        vkDestroyPipelineLayout(dev, p, 0);
+                                      }};
+  }
   return true;
 }
 
-bool createWindowFence(VulkanBackend *const backend) {
+bool createTexture(VulkanBackend *const handle, Texture **const p) {
+  if (!handle)
+    return false;
+
+  if (!p) {
+    addErrMsg(handle->logs, __func__, "The texture handle = nullptr");
+    return false;
+  }
+
+  handle->textures.push_back(std::make_unique<Texture>(handle));
+  *p = handle->textures.back().get();
+  return true;
+}
+
+bool createImage2D(VulkanBackend *const backend,
+                   uint32_t const imageWidth,
+                   uint32_t const imageHeight,
+                   VkFormat const imageFormat,
+                   VkImageUsageFlags const imageUsage,
+                   CustomUniqPtr<VkImage_T> *const out);
+
+bool transitionImageLayout(VulkanBackend *const handle,
+                           VkImage const dst,
+                           VkPipelineStageFlags2 const srcStage,
+                           VkPipelineStageFlags2 const dstStage,
+                           VkAccessFlags2 const srcFlags,
+                           VkAccessFlags2 const dstFlags,
+                           VkImageLayout const oldLayout,
+                           VkImageLayout const newLayout) {
+  if (!handle)
+    return false;
+  if (!dst) {
+    addErrMsg(handle->logs, __func__, "The destination buffer is not valid");
+    return false;
+  }
+
+  auto const dev = handle->device->handle.get();
+  CustomUniqPtr<VkFence_T> tmpFence{};
+  VkFence fence{};
+
   VkFenceCreateInfo finf{};
   finf.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  VkFence f{};
+
+  if (auto r = vkCreateFence(dev, &finf, 0, &fence); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to create fence");
+    return false;
+  }
+  tmpFence = {fence, [dev](auto *const p) { vkDestroyFence(dev, p, 0); }};
+
+  CustomUniqPtr<VkCommandPool_T> tmpPool{};
+  VkCommandPoolCreateInfo pinf{};
+  VkCommandPool pool{};
+  pinf.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+
+  if (auto r = vkCreateCommandPool(dev, &pinf, 0, &pool); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to create command pool");
+    return false;
+  }
+  tmpPool = {pool, [dev](auto *const p) { vkDestroyCommandPool(dev, p, 0); }};
+
+  VkCommandBuffer cmd{};
+  VkCommandBufferAllocateInfo cbinf{};
+  cbinf.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  cbinf.commandBufferCount = 1;
+  cbinf.commandPool = pool;
+  cbinf.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+  if (auto r = vkAllocateCommandBuffers(dev, &cbinf, &cmd); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to allocate command buffer");
+    return false;
+  }
+
+  VkCommandBufferBeginInfo beginInfo{};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  vkBeginCommandBuffer(cmd, &beginInfo);
+
+  VkDependencyInfo depInfo{};
+  depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+  depInfo.imageMemoryBarrierCount = 1;
+  VkImageMemoryBarrier2 imb{};
+  imb.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  imb.image = dst;
+  imb.srcStageMask = srcStage;
+  imb.srcAccessMask = srcFlags;
+  imb.dstStageMask = dstStage;
+  imb.dstAccessMask = dstFlags;
+  imb.oldLayout = oldLayout;
+  imb.newLayout = newLayout;
+  imb.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  imb.subresourceRange.layerCount = 1;
+  imb.subresourceRange.levelCount = 1;
+  depInfo.pImageMemoryBarriers = &imb;
+  vkCmdPipelineBarrier2(cmd, &depInfo);
+  vkEndCommandBuffer(cmd);
+
+  VkSubmitInfo sinf{};
+  sinf.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  sinf.commandBufferCount = 1;
+  sinf.pCommandBuffers = &cmd;
+  vkQueueSubmit(handle->device->graphics, 1, &sinf, fence);
+  vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+  return true;
+}
+
+bool copyBufferToImage(VulkanBackend *const handle,
+                       VkBuffer const src,
+                       VkDeviceSize const size,
+                       VkImage const dst,
+                       uint32_t const width,
+                       uint32_t const height) {
+  if (!handle)
+    return false;
+  if (!size) {
+    return true;
+  }
+  if (!dst) {
+    addErrMsg(handle->logs, __func__, "The destination buffer is not valid");
+    return false;
+  }
+  if (!src) {
+    addErrMsg(handle->logs, __func__, "The staging buffer is not valid");
+    return false;
+  }
+
+  auto const dev = handle->device->handle.get();
+  CustomUniqPtr<VkFence_T> tmpFence{};
+  VkFence fence{};
+
+  VkFenceCreateInfo finf{};
+  finf.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+  if (auto r = vkCreateFence(dev, &finf, 0, &fence); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to create fence");
+    return false;
+  }
+  tmpFence = {fence, [dev](auto *const p) { vkDestroyFence(dev, p, 0); }};
+
+  CustomUniqPtr<VkCommandPool_T> tmpPool{};
+  VkCommandPoolCreateInfo pinf{};
+  VkCommandPool pool{};
+  pinf.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+
+  if (auto r = vkCreateCommandPool(dev, &pinf, 0, &pool); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to create command pool");
+    return false;
+  }
+  tmpPool = {pool, [dev](auto *const p) { vkDestroyCommandPool(dev, p, 0); }};
+
+  VkCommandBuffer cmd{};
+  VkCommandBufferAllocateInfo cbinf{};
+  cbinf.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  cbinf.commandBufferCount = 1;
+  cbinf.commandPool = pool;
+  cbinf.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+  if (auto r = vkAllocateCommandBuffers(dev, &cbinf, &cmd); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to allocate command buffer");
+    return false;
+  }
+
+  VkCommandBufferBeginInfo beginInfo{};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  vkBeginCommandBuffer(cmd, &beginInfo);
+
+  VkDependencyInfo depInfo{};
+  depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+  depInfo.imageMemoryBarrierCount = 1;
+  VkImageMemoryBarrier2 imb{};
+  imb.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  imb.image = dst;
+  imb.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+  imb.srcAccessMask = VK_ACCESS_2_NONE;
+  imb.dstStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+  imb.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+  imb.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  imb.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  imb.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  imb.subresourceRange.layerCount = 1;
+  imb.subresourceRange.levelCount = 1;
+  depInfo.pImageMemoryBarriers = &imb;
+  vkCmdPipelineBarrier2(cmd, &depInfo);
+
+  VkBufferImageCopy r{};
+  r.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  r.imageSubresource.layerCount = 1;
+  r.imageExtent = {width, height, 1};
+  vkCmdCopyBufferToImage(cmd,
+                         handle->device->stagingBuffer.handle.get(),
+                         dst,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         1,
+                         &r);
+  vkEndCommandBuffer(cmd);
+
+  VkSubmitInfo sinf{};
+  sinf.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  sinf.commandBufferCount = 1;
+  sinf.pCommandBuffers = &cmd;
+  vkQueueSubmit(handle->device->graphics, 1, &sinf, fence);
+  vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+  return true;
+}
+
+bool createImageSampler(VulkanBackend *const handle) {
+  if (!handle)
+    return false;
+
+  VkSampler sampler;
+  VkSamplerCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  info.magFilter = VkFilter::VK_FILTER_LINEAR;
+  info.minFilter = VkFilter::VK_FILTER_LINEAR;
+  info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  info.anisotropyEnable = VK_TRUE;
+  info.maxAnisotropy = handle->device->maxAnisotropy;
+
+  auto const dev = handle->device->handle.get();
+  if (auto r = vkCreateSampler(dev, &info, 0, &sampler); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to create sampler");
+    return false;
+  }
+  handle->imageSampler = {
+      sampler, [dev](auto *const p) { vkDestroySampler(dev, p, 0); }};
+
+  return true;
+}
+
+bool loadFromFile(Texture *const handle, std::string const &p) {
+  if (!handle)
+    return false;
+
+  if (!handle->backend->device) {
+    addErrMsg(handle->backend->logs, __func__, "The device is not initialized");
+    return false;
+  }
+
+  auto const sbuf = handle->backend->device->stagingBuffer.handle.get();
+  if (!sbuf) {
+    addErrMsg(handle->backend->logs,
+              __func__,
+              "The staging buffer is not initialized");
+    return false;
+  }
+
+  if (!std::filesystem::exists(p)) {
+    addErrMsg(handle->backend->logs,
+              __func__,
+              "The file: " + std::string{p} + " does not exist");
+    return false;
+  }
+
+  stbi_set_flip_vertically_on_load(true);
+  int x, y, ch;
+  void *image = stbi_load(p.c_str(), &x, &y, &ch, STBI_rgb_alpha);
+  if (!image) {
+    addErrMsg(handle->backend->logs,
+              __func__,
+              "Loading img failed: " + std::string{p});
+    return false;
+  }
+  handle->stbImagePtr = {image, [](void *const ptr) { stbi_image_free(ptr); }};
+
+  VkDeviceSize const imgSize = x * y * 4;
+  if (imgSize > handle->backend->device->stagingBuffer.allocInfo.size) {
+    addErrMsg(handle->backend->logs,
+              __func__,
+              "The image is too big to fit in the staging buffer");
+    return false;
+  }
+
+  if (!createImage2D(handle->backend,
+                     x,
+                     y,
+                     VK_FORMAT_R8G8B8A8_SRGB,
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                         VK_IMAGE_USAGE_SAMPLED_BIT,
+                     &handle->image)) {
+    addErrMsg(
+        handle->backend->logs, __func__, "Failed to create texture image");
+    return false;
+  }
+
+  std::memcpy(handle->backend->device->stagingBuffer.allocInfo.pMappedData,
+              image,
+              imgSize);
+
+  if (!copyBufferToImage(
+          handle->backend, sbuf, imgSize, handle->image.get(), x, y)) {
+    addErrMsg(
+        handle->backend->logs, __func__, "Failed to copy texture image to gpu");
+    return false;
+  }
+
+  if (!transitionImageLayout(handle->backend,
+                             handle->image.get(),
+                             VK_PIPELINE_STAGE_2_NONE,
+                             VK_PIPELINE_STAGE_2_NONE,
+                             VK_ACCESS_2_NONE,
+                             VK_ACCESS_2_NONE,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)) {
+    addErrMsg(handle->backend->logs,
+              __func__,
+              "Failed to transition image to shader readable layout");
+    return false;
+  }
+
+  VkImageViewCreateInfo viewInfo{};
+  viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  viewInfo.image = handle->image.get();
+  viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+  viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  viewInfo.subresourceRange.baseMipLevel = 0;
+  viewInfo.subresourceRange.levelCount = 1;
+  viewInfo.subresourceRange.baseArrayLayer = 0;
+  viewInfo.subresourceRange.layerCount = 1;
+
+  auto const dev = handle->backend->device->handle.get();
+  VkImageView view{};
+  if (auto r = vkCreateImageView(dev, &viewInfo, 0, &view); r != VK_SUCCESS) {
+    addErrMsg(handle->backend->logs, __func__, "Failed to create image view");
+    return false;
+  }
+  handle->view = {view,
+                  [dev](auto *const p) { vkDestroyImageView(dev, p, 0); }};
+
+  addInfMsg(handle->backend->logs, __func__, "Success: " + std::string{p});
+  return true;
+}
+
+bool copyDataToBuffer(VulkanBackend *const handle,
+                      void const *const data,
+                      VkDeviceSize const size,
+                      VkBuffer const dst) {
+  if (!handle)
+    return false;
+  if (!data || !size) {
+    addErrMsg(handle->logs, __func__, "The data is not valid");
+    return false;
+  }
+  if (!dst) {
+    addErrMsg(handle->logs, __func__, "The destination buffer is not valid");
+    return false;
+  }
+  if (!handle->device->stagingBuffer.handle) {
+    addErrMsg(handle->logs, __func__, "The staging buffer is not valid");
+    return false;
+  }
+
+  auto const dev = handle->device->handle.get();
+  CustomUniqPtr<VkFence_T> tmpFence{};
+  VkFence fence{};
+
+  VkFenceCreateInfo finf{};
+  finf.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+  if (auto r = vkCreateFence(dev, &finf, 0, &fence); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to create fence");
+    return false;
+  }
+  tmpFence = {fence, [dev](auto *const p) { vkDestroyFence(dev, p, 0); }};
+
+  CustomUniqPtr<VkCommandPool_T> tmpPool{};
+  VkCommandPoolCreateInfo pinf{};
+  VkCommandPool pool{};
+  pinf.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+
+  if (auto r = vkCreateCommandPool(dev, &pinf, 0, &pool); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to create command pool");
+    return false;
+  }
+  tmpPool = {pool, [dev](auto *const p) { vkDestroyCommandPool(dev, p, 0); }};
+
+  VkCommandBuffer cmd{};
+  VkCommandBufferAllocateInfo cbinf{};
+  cbinf.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  cbinf.commandBufferCount = 1;
+  cbinf.commandPool = pool;
+  cbinf.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+  if (auto r = vkAllocateCommandBuffers(dev, &cbinf, &cmd); r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to allocate command buffer");
+    return false;
+  }
+
+  std::memcpy(handle->device->stagingBuffer.allocInfo.pMappedData, data, size);
+
+  VkCommandBufferBeginInfo beginInfo{};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  vkBeginCommandBuffer(cmd, &beginInfo);
+  VkBufferCopy r{.srcOffset = 0, .dstOffset = 0, .size = size};
+  vkCmdCopyBuffer(cmd, handle->device->stagingBuffer.handle.get(), dst, 1, &r);
+  vkEndCommandBuffer(cmd);
+
+  VkSubmitInfo sinf{};
+  sinf.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  sinf.commandBufferCount = 1;
+  sinf.pCommandBuffers = &cmd;
+  vkQueueSubmit(handle->device->graphics, 1, &sinf, fence);
+  vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+  return true;
+}
+
+bool uploadObjectDataToGPU(Object *const handle) {
+  if (!handle)
+    return false;
+
+  auto &vb = handle->vertexBuffer;
+  auto &vi = handle->indexBuffer;
+  auto vk = handle->backend;
+  auto const stgSz = vk->device->stagingBuffer.allocInfo.size;
+  VmaAllocation alloc;
+
+  auto sz = [](auto const &cont) { return cont.size() * sizeof(cont[0]); };
+  if (sz(handle->vertices) > stgSz || sz(handle->indices) > stgSz) {
+    addErrMsg(vk->logs,
+              __func__,
+              "The object model is too large to fit in staging buffer");
+    return false;
+  }
+
+  if (!createBuffer(vk,
+                    sz(handle->vertices),
+                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                        VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                    &vb.handle,
+                    &alloc)) {
+    addErrMsg(vk->logs, __func__, "Failed to create vertex buffer");
+    return false;
+  }
+  vmaGetAllocationInfo(vk->device->allocator.get(), alloc, &vb.allocInfo);
+
+  if (!createBuffer(vk,
+                    sz(handle->indices),
+                    VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                        VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                    &vi.handle,
+                    &alloc)) {
+    addErrMsg(vk->logs, __func__, "Failed to create index buffer");
+    return false;
+  }
+  vmaGetAllocationInfo(vk->device->allocator.get(), alloc, &vi.allocInfo);
+
+  if (!copyDataToBuffer(
+          vk, handle->vertices.data(), sz(handle->vertices), vb.handle.get())) {
+    addErrMsg(vk->logs, __func__, "Failed to copy data to vertex buffer");
+    return false;
+  }
+
+  if (!copyDataToBuffer(
+          vk, handle->indices.data(), sz(handle->indices), vi.handle.get())) {
+    addErrMsg(vk->logs, __func__, "Failed to copy data to index buffer");
+    return false;
+  }
+
+  return true;
+}
+
+bool loadFromRAM(Object *const handle,
+                 std::vector<VertexData> vertices,
+                 std::vector<uint32_t> indices) {
+  if (!handle)
+    return false;
+  if (!handle->backend)
+    return false;
+
+  handle->vertices = std::move(vertices);
+  handle->indices = std::move(indices);
+
+  if (!uploadObjectDataToGPU(handle)) {
+    addErrMsg(
+        handle->backend->logs, __func__, "Failed to upload object data to GPU");
+    return false;
+  }
+
+  return true;
+}
+
+bool loadFromFile(Object *const handle, std::string const &p) {
+  tinyobj::ObjReaderConfig reader_config;
+  tinyobj::ObjReader reader;
+
+  if (!prepareToLoadFromFile(handle, p.c_str(), &reader_config, &reader))
+    return false;
+
+  std::unordered_map<VertexData, unsigned> vertIndex{};
+  auto &attrib = reader.GetAttrib();
+  auto &shapes = reader.GetShapes();
+
+  for (size_t s = 0; s < shapes.size(); s++) {
+    size_t index_offset = 0;
+    for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
+      size_t fv = size_t(shapes[s].mesh.num_face_vertices[f]);
+
+      for (size_t v = 0; v < fv; v++) {
+        tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+        VertexData vertex{};
+        getPosition(&attrib, &idx, &vertex);
+        getNormal(&attrib, &idx, &vertex);
+        getTexture(&attrib, &idx, &vertex);
+        getColor(&attrib, &idx, &vertex);
+
+        if (!vertIndex.contains(vertex)) {
+          vertIndex.emplace(vertex, handle->vertices.size());
+          handle->vertices.push_back(vertex);
+        }
+
+        handle->indices.push_back(vertIndex.at(vertex));
+      }
+
+      index_offset += fv;
+    }
+  }
+
+  if (!uploadObjectDataToGPU(handle)) {
+    addErrMsg(
+        handle->backend->logs, __func__, "Failed to upload object data to GPU");
+    return false;
+  }
+
+  std::string summary = "Success: " + std::string{p};
+  summary += ", indices: " + std::to_string(handle->indices.size());
+  summary += ", vertices: " + std::to_string(handle->vertices.size());
+  addInfMsg(handle->backend->logs, __func__, summary);
+  return true;
+}
+
+bool createObject(VulkanBackend *const handle,
+                  Texture const *const t,
+                  Object **const p) {
+  if (!handle)
+    return false;
+
+  if (!p) {
+    addErrMsg(handle->logs, __func__, "The object handle = nullptr");
+    return false;
+  }
+
+  handle->objects.push_back(std::make_unique<Object>(handle, t));
+  if (!handle->objects.back()) {
+    addErrMsg(handle->logs, __func__, "Failed to allocate memory for object");
+    return false;
+  }
+
+  auto &obj = handle->objects.back();
+
+  if (!t) {
+    obj->pipelineLayout = handle->pipelineNoSamplerLayout.get();
+    obj->pipeline = handle->pipelineNoSampler.get();
+  } else {
+    obj->pipelineLayout = handle->pipelineSamplerLayout.get();
+    obj->pipeline = handle->pipelineSampler.get();
+
+    VkDescriptorSetAllocateInfo descAlloc{};
+    descAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    auto const pool = obj->backend->descPool.get();
+    descAlloc.descriptorPool = pool;
+    descAlloc.descriptorSetCount = 1;
+    auto const camProj = obj->backend->samplerDescSetLayout.get();
+    descAlloc.pSetLayouts = &camProj;
+
+    auto const dev = obj->backend->device->handle.get();
+    VkDescriptorSet descriptor{};
+    auto r = vkAllocateDescriptorSets(dev, &descAlloc, &descriptor);
+    if (r != VK_SUCCESS) {
+      addErrMsg(obj->backend,
+                __func__,
+                "Failed to allocate sampler descriptor set",
+                r);
+      return false;
+    }
+    obj->descriptorSet = {descriptor, [dev, pool](auto *const p) {
+                            vkFreeDescriptorSets(dev, pool, 1, &p);
+                          }};
+
+    VkDescriptorImageInfo imgInf{};
+    imgInf.sampler = obj->backend->imageSampler.get();
+    imgInf.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    if (!obj->texture->view) {
+      addErrMsg(
+          obj->backend->logs, __func__, "The texture view is not initialized");
+      return false;
+    }
+    imgInf.imageView = obj->texture->view.get();
+
+    VkWriteDescriptorSet descriptorWrite = {};
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = obj->descriptorSet.get();
+    descriptorWrite.dstBinding = 0;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pImageInfo = &imgInf;
+    vkUpdateDescriptorSets(dev, 1, &descriptorWrite, 0, nullptr);
+  }
+
+  *p = obj.get();
+  return true;
+}
+
+bool getWindowHandle(VulkanWindow const *const vkWin,
+                     GLFWwindow **const glfwWin) {
+  if (!vkWin)
+    return false;
+  if (!glfwWin) {
+    addErrMsg(vkWin->logs, __func__, "The window handle = nullptr");
+    return false;
+  }
+  *glfwWin = vkWin->handle.get();
+  return true;
+}
+
+bool setCameraProjection(VulkanBackend *const handle, glm::mat4 const &m) {
+  if (!handle)
+    return false;
+  if (!handle->device) {
+    addErrMsg(handle->logs, __func__, "The device is not initialized");
+    return false;
+  }
+  if (!handle->device->camProjBuffer.allocInfo.pMappedData) {
+    addErrMsg(handle->logs, __func__, "The projection buffer is not mapped");
+    return false;
+  }
+
+  std::memcpy(
+      handle->device->camProjBuffer.allocInfo.pMappedData, &m, sizeof(m));
+  return true;
+}
+
+bool setCameraView(VulkanBackend *const handle, glm::mat4 const &m) {
+  if (!handle)
+    return false;
+  handle->constants.view = m;
+  return true;
+}
+
+bool createWindowSwapchain(VulkanBackend *const backend,
+                           VulkanWindow *const window) {
+  if (!backend)
+    return false;
+
+  if (!backend->device) {
+    addErrMsg(backend->logs, __func__, "The backend device = nullptr");
+    return false;
+  }
+
+  VkPhysicalDevice phy = backend->device->physical;
+  VkSurfaceCapabilitiesKHR surfaceCaps;
+  auto const surface = window->surface.get();
+
+  if (auto r =
+          vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phy, surface, &surfaceCaps);
+      r != VK_SUCCESS) {
+    addErrMsg(backend->logs, __func__, "Failed to query surface capabilities");
+    return false;
+  }
+
+  window->surfaceFormat.format = VK_FORMAT_B8G8R8A8_UNORM;
+  window->surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+
+  auto numberOfImages = surfaceCaps.minImageCount + 1;
+  if ((surfaceCaps.maxImageCount > 0) &&
+      (numberOfImages > surfaceCaps.maxImageCount)) {
+    numberOfImages = surfaceCaps.maxImageCount;
+  }
+
+  VkSwapchainCreateInfoKHR swpInfo{};
+  swpInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  swpInfo.compositeAlpha =
+      VkCompositeAlphaFlagBitsKHR::VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  swpInfo.imageArrayLayers = 1;
+  swpInfo.clipped = VK_TRUE;
+  swpInfo.imageColorSpace = window->surfaceFormat.colorSpace;
+  swpInfo.imageFormat = window->surfaceFormat.format;
+
+  int width, height;
+  glfwGetWindowSize(window->handle.get(), &width, &height);
+
+  swpInfo.imageExtent = VkExtent2D{(uint32_t)width, (uint32_t)height};
+  swpInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  swpInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  swpInfo.surface = window->surface.get();
+  swpInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+  swpInfo.minImageCount = numberOfImages;
+  swpInfo.preTransform =
+      VkSurfaceTransformFlagBitsKHR::VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
+  VkSwapchainKHR swapchain{};
+  if (auto result = vkCreateSwapchainKHR(
+          backend->device->handle.get(), &swpInfo, 0, &swapchain);
+      result != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to create window swapchain", result);
+    return false;
+  }
+
   auto dev = backend->device->handle.get();
-  auto r = vkCreateFence(backend->device->handle.get(), &finf, 0, &f);
-  if (r != VK_SUCCESS) {
-    addErrMsg(backend, "createWindowFence: Failed to create fence", r);
-    return false;
-  }
-  auto &fence = backend->window->fence;
-  fence = {f, [dev](VkFence_T *const p) { vkDestroyFence(dev, p, 0); }};
+  window->swapchain = {swapchain, [dev](VkSwapchainKHR_T *const ptr) {
+                         vkDestroySwapchainKHR(dev, ptr, 0);
+                       }};
 
   return true;
 }
 
-bool allocateCommandBuffers(VulkanBackend *const backend) {
+bool createCommandPool(VulkanBackend *const backend,
+                       uint32_t const queueFamilyIndex,
+                       CustomUniqPtr<VkCommandPool_T> *const cmdPool) {
+  VkCommandPoolCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+               VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
   auto const dev = backend->device->handle.get();
+  VkCommandPool pool{};
 
-  VkCommandBufferAllocateInfo info{};
-  info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  info.commandPool = backend->graphicsCmdPool.get();
-  info.level = VkCommandBufferLevel::VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
-  auto &buf = backend->window->graphicsBuf;
-  info.commandBufferCount = 1;
-
-  auto result = vkAllocateCommandBuffers(dev, &info, &buf);
+  info.queueFamilyIndex = queueFamilyIndex;
+  auto result = vkCreateCommandPool(dev, &info, 0, &pool);
   if (result != VK_SUCCESS) {
-    addErrMsg(backend,
-              "allocateCommandBuffers: Failed to allocate cmd buffer",
-              result);
+    addErrMsg(backend, __func__, "Failed to create command pool", result);
     return false;
   }
 
+  *cmdPool = {pool, [dev](VkCommandPool_T *const p) {
+                vkDestroyCommandPool(dev, p, 0);
+              }};
   return true;
 }
 
-bool createWindowSemaphores(VulkanBackend *const backend) {
-  auto const dev = backend->device->handle.get();
-  VkSemaphoreCreateInfo info{};
-  info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+bool transitionSwapchainImages(VulkanBackend *const backend,
+                               VulkanWindow *const window) {
+  VkCommandBufferAllocateInfo bi{};
+  bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  bi.commandBufferCount = 1;
+  bi.commandPool = window->graphicsCmdPool.get();
+  bi.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
-  backend->window->renderSem.resize(backend->window->swapImages.size());
-  std::vector<UniqueRes<VkSemaphore_T> *> sem = {&backend->window->acquireSem};
-  for (auto &s : backend->window->renderSem)
-    sem.push_back(&s);
-
-  for (std::size_t i = 0; i < sem.size(); ++i) {
-    VkSemaphore semaphore{};
-    auto result = vkCreateSemaphore(dev, &info, 0, &semaphore);
-    if (result != VK_SUCCESS) {
-      addErrMsg(backend,
-                "createWindowSemaphores: Failed to create render semaphore",
-                result);
-      return false;
-    }
-
-    *sem[i] = {semaphore, [dev](VkSemaphore_T *const p) {
-                 vkDestroySemaphore(dev, p, 0);
-               }};
+  VkDevice dev = backend->device->handle.get();
+  if (!dev) {
+    addErrMsg(backend->logs, __func__, "The device hasn't been initialized");
+    return false;
   }
 
-  return true;
-}
-
-bool createSwapchainImageViews(VulkanBackend *const backend) {
-  auto const size = backend->window->swapImages.size();
-  auto const dev = backend->device->handle.get();
-  auto &views = backend->window->swapImgViews;
-  views.resize(size);
-
-  for (std::size_t i = 0; i < size; ++i) {
-    VkImageViewCreateInfo info{};
-    info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    info.viewType = VkImageViewType::VK_IMAGE_VIEW_TYPE_2D;
-    info.image = backend->window->swapImages[i];
-    info.components = VkComponentMapping{.r = VK_COMPONENT_SWIZZLE_R,
-                                         .g = VK_COMPONENT_SWIZZLE_G,
-                                         .b = VK_COMPONENT_SWIZZLE_B,
-                                         .a = VK_COMPONENT_SWIZZLE_A};
-
-    info.format = backend->window->surfaceFormat.format;
-    info.subresourceRange = VkImageSubresourceRange{
-        .aspectMask = VkImageAspectFlagBits::VK_IMAGE_ASPECT_COLOR_BIT,
-        .baseMipLevel = 0,
-        .levelCount = 1,
-        .baseArrayLayer = 0,
-        .layerCount = 1};
-
-    VkImageView view{};
-    auto result = vkCreateImageView(dev, &info, 0, &view);
-    if (result != VK_SUCCESS) {
-      addErrMsg(backend,
-                "createSwapchainImageViews: Failed to create image view",
-                result);
-      return false;
-    }
-
-    views[i] = {
-        view, [dev](VkImageView_T *const p) { vkDestroyImageView(dev, p, 0); }};
+  VkCommandBuffer cmd;
+  if (auto r = vkAllocateCommandBuffers(dev, &bi, &cmd); r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to allocate command buffer", r);
+    return false;
   }
+  CustomUniqPtr<VkCommandBuffer_T> cmdGuard = {
+      cmd, [dev, pool = bi.commandPool](auto *const) {
+        vkResetCommandPool(dev, pool, 0);
+      }};
 
-  return true;
-}
-
-bool transitionSwapchainImages(VulkanBackend *const backend) {
-  VkCommandBuffer const cmd = backend->window->graphicsBuf;
   VkCommandBufferBeginInfo cbi{};
   cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   if (auto r = vkBeginCommandBuffer(cmd, &cbi); r != VK_SUCCESS) {
-    addErrMsg(
-        backend,
-        "transitionSwapchainImages: Failed to begin recording command buffer",
-        r);
+    addErrMsg(backend, __func__, "Failed to begin recording command buffer", r);
     return false;
   }
 
@@ -640,1051 +1842,872 @@ bool transitionSwapchainImages(VulkanBackend *const backend) {
   depInfo.imageMemoryBarrierCount = 1;
   depInfo.pImageMemoryBarriers = &barrier;
 
-  for (std::size_t i = 0; i < backend->window->swapImages.size(); ++i) {
-    barrier.image = backend->window->swapImages[i];
+  for (std::size_t i = 0; i < window->images.size(); ++i) {
+    barrier.image = window->images[i];
     vkCmdPipelineBarrier2(cmd, &depInfo);
   }
 
   if (auto r = vkEndCommandBuffer(cmd); r != VK_SUCCESS) {
-    addErrMsg(
-        backend,
-        "transitionSwapchainImages: Failed to end recording command buffer",
-        r);
+    addErrMsg(backend, __func__, "Failed to end recording command buffer", r);
     return false;
   }
 
-  auto const fence = backend->window->fence.get();
+  VkFenceCreateInfo finf{};
+  finf.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  VkFence fence{};
+  auto r = vkCreateFence(backend->device->handle.get(), &finf, 0, &fence);
+  if (r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to create fence", r);
+    return false;
+  }
+  CustomUniqPtr<VkFence_T> fencePtr = {
+      fence, [dev](VkFence_T *const p) { vkDestroyFence(dev, p, 0); }};
+
   VkSubmitInfo2 submitInfo{};
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
 
   submitInfo.commandBufferInfoCount = 1;
   VkCommandBufferSubmitInfo cbsi{};
   cbsi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-  cbsi.commandBuffer = backend->window->graphicsBuf;
+  cbsi.commandBuffer = cmd;
   submitInfo.pCommandBufferInfos = &cbsi;
 
   if (auto r = vkQueueSubmit2(backend->device->graphics, 1, &submitInfo, fence);
       r != VK_SUCCESS) {
-    addErrMsg(backend,
-              "transitionSwapchainImages: Failed to submit command buffer",
-              r);
+    addErrMsg(backend, __func__, "Failed to submit command buffer", r);
     return false;
   }
 
-  auto const dev = backend->device->handle.get();
   if (auto r = vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
       r != VK_SUCCESS) {
-    addErrMsg(
-        backend, "transitionSwapchainImages: Failed to wait for fence", r);
-    return false;
-  }
-
-  if (auto r = vkResetFences(dev, 1, &fence); r != VK_SUCCESS) {
-    addErrMsg(backend, "transitionSwapchainImages: Failed to reset fence", r);
+    addErrMsg(backend, __func__, "Failed to wait for fence", r);
     return false;
   }
 
   return true;
 }
 
-bool fetchSwapchainImages(VulkanBackend *const backend) {
-  uint32_t count{};
+bool createFrameResources(VulkanBackend *const backend,
+                          VulkanWindow *const window) {
+  auto const dev = backend->device->handle.get();
+  window->frames.resize(window->images.size());
 
-  if (auto result = vkGetSwapchainImagesKHR(backend->device->handle.get(),
-                                            backend->window->swapchain.get(),
-                                            &count,
-                                            0);
-      result != VK_SUCCESS) {
-    addErrMsg(backend,
-              "fetchSwapchainImages: Failed to query swapchain image count",
-              result);
-    return false;
-  }
-
-  backend->window->swapImages.resize(count);
-
-  if (auto result = vkGetSwapchainImagesKHR(backend->device->handle.get(),
-                                            backend->window->swapchain.get(),
-                                            &count,
-                                            backend->window->swapImages.data());
-      result != VK_SUCCESS) {
-    addErrMsg(backend,
-              "fetchSwapchainImages: Failed to fetch swapchain images",
-              result);
-    return false;
-  }
-
-  return true;
-}
-
-bool createWindowSwapchain(VulkanBackend *const backend) {
-  auto numberOfImages = backend->window->surfaceCaps.minImageCount + 1;
-  if ((backend->window->surfaceCaps.maxImageCount > 0) &&
-      (numberOfImages > backend->window->surfaceCaps.maxImageCount)) {
-    numberOfImages = backend->window->surfaceCaps.maxImageCount;
-  }
-
-  VkSwapchainCreateInfoKHR swpInfo{};
-  swpInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  swpInfo.compositeAlpha =
-      VkCompositeAlphaFlagBitsKHR::VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  swpInfo.imageArrayLayers = 1;
-  swpInfo.clipped = VK_TRUE;
-  swpInfo.imageColorSpace = backend->window->surfaceFormat.colorSpace;
-  swpInfo.imageFormat = backend->window->surfaceFormat.format;
-
-  uint32_t const width = backend->window->width,
-                 height = backend->window->height;
-  swpInfo.imageExtent = VkExtent2D{width, height};
-  swpInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  swpInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-  swpInfo.surface = backend->window->surface.get();
-  swpInfo.presentMode = backend->window->presentMode;
-  swpInfo.minImageCount = numberOfImages;
-  swpInfo.preTransform =
-      VkSurfaceTransformFlagBitsKHR::VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-
-  VkSwapchainKHR swapchain{};
-  if (auto result = vkCreateSwapchainKHR(
-          backend->device->handle.get(), &swpInfo, 0, &swapchain);
-      result != VK_SUCCESS) {
-    addErrMsg(backend,
-              "createWindowSwapchain: Failed to create window swapchain",
-              result);
-    return false;
-  }
-
-  auto dev = backend->device->handle.get();
-  backend->window->swapchain = {swapchain, [dev](VkSwapchainKHR_T *const ptr) {
-                                  vkDestroySwapchainKHR(dev, ptr, 0);
-                                }};
-
-  return true;
-}
-
-bool checkSurfaceEligibility(VulkanBackend *const backend) {
-  uint32_t count{};
-  if (auto result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-          backend->device->identifier,
-          backend->window->surface.get(),
-          &backend->window->surfaceCaps);
-      result != VK_SUCCESS) {
-    addErrMsg(backend,
-              "checkSurfaceEligibility: Failed to query surface capabilities",
-              result);
-    return false;
-  }
-
-  if (backend->window->width >
-      backend->window->surfaceCaps.maxImageExtent.width) {
-    addErrMsg(backend,
-              "checkSurfaceEligibility: Requested surface width too large");
-    return false;
-  }
-
-  if (backend->window->height >
-      backend->window->surfaceCaps.maxImageExtent.height) {
-    addErrMsg(backend,
-              "checkSurfaceEligibility: Requested surface height too large");
-    return false;
-  }
-
-  if (!(backend->window->surfaceCaps.supportedUsageFlags &
-        VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) {
-    addErrMsg(backend,
-              "checkSurfaceEligibility: Color attachment not supported");
-    return false;
-  }
-
-  if (auto result =
-          vkGetPhysicalDeviceSurfaceFormatsKHR(backend->device->identifier,
-                                               backend->window->surface.get(),
-                                               &count,
-                                               0);
-      result != VK_SUCCESS) {
-    addErrMsg(backend,
-              "checkSurfaceEligibility: Failed to query surface formats",
-              result);
-    return false;
-  }
-
-  backend->window->surfaceFormats.resize(count);
-  if (auto result = vkGetPhysicalDeviceSurfaceFormatsKHR(
-          backend->device->identifier,
-          backend->window->surface.get(),
-          &count,
-          backend->window->surfaceFormats.data());
-      result != VK_SUCCESS) {
-    addErrMsg(backend,
-              "checkSurfaceEligibility: Failed to fill surface formats",
-              result);
-    return false;
-  }
-
-  if ((1 == backend->window->surfaceFormats.size()) &&
-      (VK_FORMAT_UNDEFINED == backend->window->surfaceFormats[0].format)) {
-    backend->window->surfaceFormat.format = VK_FORMAT_R8G8B8A8_UNORM;
-    backend->window->surfaceFormat.colorSpace =
-        VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-  } else if (backend->window->surfaceFormats.size()) {
-    backend->window->surfaceFormat = backend->window->surfaceFormats[0];
-  } else {
-    addErrMsg(backend, "checkSurfaceEligibility: No surface formats available");
-    return false;
-  }
-
-  return true;
-}
-bool isPresentModeAvailable(VulkanBackend *const backend) {
-  bool found = false;
-  for (auto mode : backend->window->presentModes) {
-    if (mode == backend->window->presentMode) {
-      found = true;
-      break;
+  for (auto &frame : window->frames) {
+    VkCommandBufferAllocateInfo cmdAlloc{};
+    cmdAlloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmdAlloc.commandBufferCount = 1;
+    cmdAlloc.commandPool = window->graphicsCmdPool.get();
+    cmdAlloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    if (auto r = vkAllocateCommandBuffers(dev, &cmdAlloc, &frame.gCmdBuf);
+        r != VK_SUCCESS) {
+      addErrMsg(backend->logs, __func__, "Failed to allocate graphics buffer");
+      return false;
     }
-  }
 
-  if (!found) {
-    std::string mode = std::to_string(backend->window->presentMode);
-    addErrMsg(backend,
-              "isPresentModeAvailable: The requested present mode: " + mode);
-    return false;
+    cmdAlloc.commandPool = window->presentationCmdPool.get();
+    if (auto r = vkAllocateCommandBuffers(dev, &cmdAlloc, &frame.pCmdBuf);
+        r != VK_SUCCESS) {
+      addErrMsg(
+          backend->logs, __func__, "Failed to allocate presentation buffer");
+      return false;
+    }
+
+    VkFenceCreateInfo fi{};
+    fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fi.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    VkFence fence;
+    if (auto r = vkCreateFence(dev, &fi, 0, &fence); r != VK_SUCCESS) {
+      addErrMsg(backend->logs, __func__, "Failed to create frame fence");
+      return false;
+    }
+    frame.syncFence = {fence,
+                       [dev](auto *const p) { vkDestroyFence(dev, p, 0); }};
+
+    VkSemaphoreCreateInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    VkSemaphore sem;
+    if (auto r = vkCreateSemaphore(dev, &si, 0, &sem); r != VK_SUCCESS) {
+      addErrMsg(backend->logs, __func__, "Failed to create frame semaphore");
+      return false;
+    }
+    frame.imageAcquiredSem = {
+        sem, [dev](auto *const p) { vkDestroySemaphore(dev, p, 0); }};
+
+    if (auto r = vkCreateSemaphore(dev, &si, 0, &sem); r != VK_SUCCESS) {
+      addErrMsg(backend->logs, __func__, "Failed to create frame semaphore");
+      return false;
+    }
+    frame.renderDoneSem = {
+        sem, [dev](auto *const p) { vkDestroySemaphore(dev, p, 0); }};
   }
 
   return true;
 }
 
-bool queryPresentModes(VulkanBackend *const backend) {
-  backend->window->presentModes.clear();
+bool createDepthImage(VulkanBackend *const backend,
+                      uint32_t imageWidth,
+                      uint32_t imageHeight,
+                      CustomUniqPtr<VkImage_T> *const out);
+
+bool createDepthAttachment(VulkanBackend *const backend,
+                           VulkanWindow *const window) {
+  int width, height;
+  glfwGetWindowSize(window->handle.get(), &width, &height);
+
+  if (!createDepthImage(backend, width, height, &window->depthImage)) {
+    addErrMsg(backend->logs, __func__, "Failed to create depth image");
+    return false;
+  }
+
+  VkImageViewCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  info.image = window->depthImage.get();
+  info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  info.components = VkComponentMapping{.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                       .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                       .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                       .a = VK_COMPONENT_SWIZZLE_IDENTITY};
+  info.subresourceRange = {
+      .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+      .baseMipLevel = 0,
+      .levelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+  };
+
+  info.format = VK_FORMAT_D32_SFLOAT;
+
+  auto const dev = backend->device->handle.get();
+  VkImageView handle{};
+  if (auto r = vkCreateImageView(dev, &info, 0, &handle); r != VK_SUCCESS) {
+    addErrMsg(backend, __func__, "Failed to create depth image view", r);
+    return false;
+  }
+
+  window->depthView = {
+      handle, [dev](VkImageView_T *const p) { vkDestroyImageView(dev, p, 0); }};
+
+  return true;
+}
+
+bool createWindowResources(VulkanBackend *const backend,
+                           VulkanWindow *const window) {
   uint32_t count{};
-  if (auto result = vkGetPhysicalDeviceSurfacePresentModesKHR(
-          backend->device->identifier,
-          backend->window->surface.get(),
-          &count,
-          nullptr);
+
+  if (auto result = vkGetSwapchainImagesKHR(
+          backend->device->handle.get(), window->swapchain.get(), &count, 0);
       result != VK_SUCCESS) {
     addErrMsg(
-        backend, "queryPresentModes: Failed to query present modes", result);
+        backend, __func__, "Failed to query swapchain image count", result);
     return false;
   }
 
-  backend->window->presentModes.resize(count);
-  if (auto result = vkGetPhysicalDeviceSurfacePresentModesKHR(
-          backend->device->identifier,
-          backend->window->surface.get(),
-          &count,
-          backend->window->presentModes.data());
+  window->imageViews.resize(count);
+  window->images.resize(count);
+
+  if (auto result = vkGetSwapchainImagesKHR(backend->device->handle.get(),
+                                            window->swapchain.get(),
+                                            &count,
+                                            window->images.data());
       result != VK_SUCCESS) {
-    addErrMsg(
-        backend, "queryPresentModes: Failed to fill present modes", result);
+    addErrMsg(backend, __func__, "Failed to fetch swapchain images", result);
     return false;
   }
 
-  return true;
+  VkImageView view{};
+  VkImageViewCreateInfo vci{};
+  vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  vci.components = VkComponentMapping{.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                      .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                      .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                      .a = VK_COMPONENT_SWIZZLE_IDENTITY};
+  vci.format = window->surfaceFormat.format;
+  vci.subresourceRange =
+      VkImageSubresourceRange{.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                              .baseMipLevel = 0,
+                              .levelCount = 1,
+                              .baseArrayLayer = 0,
+                              .layerCount = 1};
+
+  auto const dev = backend->device->handle.get();
+
+  for (std::size_t i = 0; i < window->images.size(); ++i) {
+    vci.image = window->images[i];
+    if (auto r = vkCreateImageView(dev, &vci, 0, &view); r != VK_SUCCESS) {
+      addErrMsg(backend->logs, __func__, "Failed to create image view");
+      return false;
+    }
+    window->imageViews[i] = {
+        view, [dev](auto *const p) { vkDestroyImageView(dev, p, 0); }};
+  }
+
+  if (!createDepthAttachment(backend, window)) {
+    addErrMsg(backend->logs, __func__, "Failed to create depth image");
+    return false;
+  }
+
+  return createFrameResources(backend, window);
 }
 
-bool createWindowSurface(VulkanBackend *const backend) {
-  auto const win = backend->window->handle.get();
-  VkSurfaceKHR surf{};
+bool createWindow(VulkanBackend *const handle,
+                  uint32_t const width,
+                  uint32_t const height,
+                  char const *const title,
+                  VulkanWindow **const window) {
+  if (!handle)
+    return false;
 
-  if (auto result = glfwCreateWindowSurface(
-          backend->instance->handle.get(), win, 0, &surf);
-      result != VK_SUCCESS) {
-    addErrMsg(backend,
-              "createWindowSurface: Failed to create vulkan surface",
-              result);
+  uint32_t windowWidth = width, windowHeight = height;
+  if (width < 640) {
+    addWrnMsg(
+        handle->logs, __func__, "The requested window width is too small");
+    windowWidth = 640;
+  }
+
+  if (height < 480) {
+    addWrnMsg(
+        handle->logs, __func__, "The requested window height is too small");
+    windowHeight = 480;
+  }
+
+  if (!window) {
+    addErrMsg(handle->logs, __func__, "The window handle = nullptr");
     return false;
   }
 
-  auto inst = backend->instance->handle.get();
-  backend->window->surface = {surf, [inst](VkSurfaceKHR_T *const ptr) {
-                                if (ptr)
-                                  vkDestroySurfaceKHR(inst, ptr, 0);
-                              }};
-
-  return true;
-}
-
-bool createGLFWindow(VulkanBackend *const backend,
-                     uint32_t width,
-                     uint32_t height) {
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
-
-  GLFWwindow *win =
-      glfwCreateWindow(width, height, backend->instance->title.c_str(), 0, 0);
-  if (!win) {
-    addErrMsg(backend, "createGLFWindow: Failed to create GLFW window");
+  auto w =
+      glfwCreateWindow(windowWidth, windowHeight, title ? title : "", 0, 0);
+  if (!w) {
+    addErrMsg(handle->logs, __func__, "Failed to create GLFW window");
     return false;
   }
 
-  backend->window->handle = {win, [](GLFWwindow *const ptr) {
-                               if (ptr)
-                                 glfwDestroyWindow(ptr);
-                             }};
-  backend->window->width = width;
-  backend->window->height = height;
+  if (!handle->instance) {
+    addErrMsg(handle->logs, __func__, "The instance hasn't been initialized");
+    return false;
+  }
 
+  auto const inst = handle->instance->handle.get();
+  VulkanWindow windowData;
+  if (!inst) {
+    addErrMsg(handle->logs, __func__, "The instance hasn't been initialized");
+    return false;
+  }
+  windowData.handle = {w, [](auto *const p) { glfwDestroyWindow(p); }};
+
+  if (!createCommandPool(handle,
+                         handle->device->graphicsFamilyIndex,
+                         &windowData.graphicsCmdPool)) {
+    addErrMsg(handle->logs, __func__, "Failed to create window command pool");
+    return false;
+  }
+
+  if (!createCommandPool(handle,
+                         handle->device->presentationFamilyIndex,
+                         &windowData.presentationCmdPool)) {
+    addErrMsg(handle->logs, __func__, "Failed to create window command pool");
+    return false;
+  }
+
+  VkSurfaceKHR surface;
+  if (glfwCreateWindowSurface(inst, w, 0, &surface)) {
+    addErrMsg(handle->logs, __func__, "Failed to create surface");
+    return false;
+  }
+  windowData.surface = {
+      surface, [inst](auto *const p) { vkDestroySurfaceKHR(inst, p, 0); }};
+
+  if (!createWindowSwapchain(handle, &windowData)) {
+    addErrMsg(handle->logs, __func__, "Failed to create swapchain");
+    return false;
+  }
+
+  if (!createWindowResources(handle, &windowData)) {
+    addErrMsg(handle->logs, __func__, "Failed to create frame resources");
+    return false;
+  }
+
+  if (!transitionSwapchainImages(handle, &windowData)) {
+    addErrMsg(handle->logs, __func__, "Failed to transition swapchain images");
+    return false;
+  }
+
+  windowData.windowWidth = width;
+  windowData.windowHeight = height;
+  windowData.logs = handle->logs;
+  handle->windows.push_back(std::move(windowData));
+  *window = &handle->windows.back();
   return true;
 }
 
-bool isKeyPressed(Window const *const window, int key, bool *const output) {
-  if (!window)
+bool getGeneralCommandPool(VulkanBackend const *const backend,
+                           VkCommandPool *const cmdPool) {
+  if (!backend)
     return false;
 
-  if (!output) {
-    addErrMsg(window, "isKeyPressed: The parameter 'output' = nullptr");
-    return false;
-  }
-
-  auto const win = window->handle.get();
-  *output = glfwGetKey(win, key) == GLFW_PRESS;
-  return true;
-}
-
-bool isOpen(Window const *const window, bool *const output) {
-  if (!window)
-    return false;
-
-  if (!output) {
-    addErrMsg(window, "isOpen: The parameter 'output' = nullptr");
+  if (!cmdPool) {
+    addErrMsg(backend->logs, __func__, "The output handle = nullptr");
     return false;
   }
 
-  *output = false;
-
-  auto win = window->handle.get();
-  if (win && glfwWindowShouldClose(window->handle.get()) == GLFW_FALSE)
-    *output = true;
-
-  return true;
-}
-
-bool createOptimalGPU(VulkanBackend *const backend) {
-  backend->device = std::make_unique<Device>();
-
-  std::unordered_map<VkPhysicalDevice, DeviceInfo> devs{};
-  if (!queryEligibleDevices(backend->instance->handle.get(), &devs) ||
-      !devs.size()) {
-    addErrMsg(backend, "createOptimalGPU: Failed to query eligible devices");
-    return false;
-  }
-
-  std::unordered_map<VkPhysicalDevice, DeviceInfo>::const_iterator it{};
-  if (!selectOptimalDevice(devs, &it)) {
-    addErrMsg(backend, "createOptimalGPU: Failed to select optimal device");
-    return false;
-  }
-
-  auto const &[phy, devInfo] = *it;
-  std::vector<VkDeviceQueueCreateInfo> qCreateInfos;
-  VkDeviceCreateInfo devCreateInfo{};
-  VkPhysicalDeviceFeatures reqF{};
-  devCreateInfo.pEnabledFeatures = &reqF;
-
-  setupCreateInfo(&devCreateInfo, &qCreateInfos, &reqF, &devInfo);
-
-  if (!createLogicalDevice(backend, &devCreateInfo, phy, &devInfo)) {
-    addErrMsg(backend, "createOptimalGPU: Failed to create logical device");
-    return false;
-  }
-
-  if (!createDescriptors(backend)) {
-    addErrMsg(backend, "createOptimalGPU: Failed to create descriptors");
-    return false;
-  }
-
-  return true;
-}
-
-bool createDescriptors(VulkanBackend *const backend) {
-  auto const dev = backend->device->handle.get();
-  constexpr uint32_t descriptorCount = VulkanBackend::maxDescriptors;
-
-  VkDescriptorPoolCreateInfo poolInfo{};
-  poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  poolInfo.maxSets = 1;
-
-  VkDescriptorPoolSize poolSizes[] = {VkDescriptorPoolSize{
-      .type = VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      .descriptorCount = descriptorCount}};
-
-  poolInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
-  poolInfo.pPoolSizes = poolSizes;
-
-  VkDescriptorPool pool{};
-  auto r = vkCreateDescriptorPool(dev, &poolInfo, 0, &pool);
-  if (r != VK_SUCCESS) {
+  if (!backend->device) {
     addErrMsg(
-        backend, "createDescriptors: Failed to create descriptor pool", r);
+        backend->logs, __func__, "The backend device has not been initialized");
     return false;
   }
 
-  backend->descPool = {pool, [dev](VkDescriptorPool_T *const p) {
-                         vkDeviceWaitIdle(dev);
-                         vkDestroyDescriptorPool(dev, p, 0);
-                       }};
-
-  VkDescriptorSetLayoutCreateInfo descInfo{};
-  descInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-
-  VkDescriptorSetLayoutBinding bindings[] = {VkDescriptorSetLayoutBinding{
-      .binding = 0,
-      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      .descriptorCount = descriptorCount,
-      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-      .pImmutableSamplers = 0}};
-
-  descInfo.bindingCount = sizeof(bindings) / sizeof(bindings[0]);
-  descInfo.pBindings = bindings;
-
-  VkDescriptorSetLayout descLayout{};
-  r = vkCreateDescriptorSetLayout(dev, &descInfo, 0, &descLayout);
-  if (r != VK_SUCCESS) {
-    addErrMsg(backend,
-              "createDescriptors: Failed to create descriptor set layout",
-              r);
-    return false;
-  }
-
-  backend->descLayout = {descLayout, [dev](VkDescriptorSetLayout_T *const p) {
-                           vkDestroyDescriptorSetLayout(dev, p, 0);
-                         }};
-
-  VkDescriptorSetAllocateInfo descAlloc{};
-  descAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  descAlloc.descriptorPool = backend->descPool.get();
-  descAlloc.descriptorSetCount = 1;
-  descAlloc.pSetLayouts = &descLayout;
-
-  VkDescriptorSet descriptor{};
-  r = vkAllocateDescriptorSets(dev, &descAlloc, &descriptor);
-
-  if (r != VK_SUCCESS) {
+  if (!backend->device->cmdPool) {
     addErrMsg(
-        backend, "createDescriptors: Failed to allocate descriptor set", r);
-    return true;
+        backend->logs, __func__, "The command pool has not been initialized");
+    return false;
   }
 
-  backend->descSets.push_back(descriptor);
+  *cmdPool = backend->device->cmdPool.get();
   return true;
 }
 
-bool createLogicalDevice(VulkanBackend *const backend,
-                         VkDeviceCreateInfo *const info,
-                         VkPhysicalDevice const phy,
-                         DeviceInfo const *const devInfo) {
-
-  VkPhysicalDeviceSynchronization2Features sync2Feature{};
-  sync2Feature.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
-  sync2Feature.synchronization2 = VK_TRUE;
-
-  VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeature{};
-  dynamicRenderingFeature.sType =
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
-  dynamicRenderingFeature.pNext = &sync2Feature;
-  dynamicRenderingFeature.dynamicRendering = VK_TRUE;
-
-  info->pNext = &dynamicRenderingFeature;
-
-  VkDevice dev{};
-  if (auto result = vkCreateDevice(phy, info, 0, &dev); result != VK_SUCCESS) {
-    addErrMsg(backend, "createLogicalDevice: Failed to create device", result);
-    return false;
-  }
-
-  auto &graphicsQ = backend->device->graphics;
-  auto &presentQ = backend->device->present;
-
-  backend->device->graphicsFamIndex = devInfo->graphicsQueue.famIndex;
-  backend->device->presentFamIndex = devInfo->presentQueue.famIndex;
-
-  vkGetDeviceQueue(dev, devInfo->graphicsQueue.famIndex, 0, &graphicsQ);
-  presentQ = graphicsQ;
-
-  if (devInfo->graphicsQueue.famIndex != devInfo->presentQueue.famIndex)
-    vkGetDeviceQueue(dev, devInfo->presentQueue.famIndex, 0, &presentQ);
-
-  backend->device->identifier = phy;
-  backend->device->handle = {dev, [](VkDevice ptr) {
-                               vkDeviceWaitIdle(ptr);
-                               vkDestroyDevice(ptr, 0);
-                             }};
-
-  if (!createDeviceResources(backend)) {
-    addErrMsg(backend,
-              "createLogicalDevice: Failed to create device resources");
-    return false;
-  }
-
-  return true;
+void addErrMsg(VulkanBackend const *const handle,
+               std::string const &tag,
+               std::string const &msg,
+               VkResult const r) {
+  std::string vkmsg = std::string{", Vulkan code: "} + string_VkResult(r);
+  addErrMsg(handle->logs, tag, msg + vkmsg);
 }
 
-bool createDeviceResources(VulkanBackend *const backend) {
-  if (!createCommandPools(backend)) {
-    addErrMsg(backend, "createDeviceResources: Failed to create command pool");
+bool getVulkanAllocator(VulkanBackend const *const backend,
+                        VmaAllocator *const alloc) {
+  if (!backend)
+    return false;
+
+  if (!alloc) {
+    addErrMsg(backend->logs, __func__, "The allocator handle = nullptr");
     return false;
   }
 
-  if (!createAllocator(backend, &backend->allocator)) {
-    addErrMsg(backend, "createDeviceResources: Failed to create allocator");
+  if (!backend->device) {
+    addErrMsg(backend->logs, __func__, "The device has not beed initialized");
     return false;
   }
 
-  return true;
-}
-
-bool createCommandPools(VulkanBackend *const backend) {
-  VkCommandPoolCreateInfo info{};
-  info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
-               VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-
-  auto const dev = backend->device->handle.get();
-  VkCommandPool pool{};
-
-  info.queueFamilyIndex = backend->device->graphicsFamIndex;
-  auto result = vkCreateCommandPool(dev, &info, 0, &pool);
-  if (result != VK_SUCCESS) {
+  auto const &a = backend->device->allocator;
+  if (!a) {
     addErrMsg(
-        backend, "createCommandPools: Failed to create command pool", result);
+        backend->logs, __func__, "The allocator has not beed initialized");
     return false;
   }
-  backend->graphicsCmdPool = {pool, [dev](VkCommandPool_T *const p) {
-                                vkDestroyCommandPool(dev, p, 0);
-                              }};
 
+  *alloc = a.get();
   return true;
 }
 
-void setupCreateInfo(VkDeviceCreateInfo *const devCreateInfo,
-                     std::vector<VkDeviceQueueCreateInfo> *const qCreateInfos,
-                     VkPhysicalDeviceFeatures *const features,
-                     DeviceInfo const *const devInfo) {
-  devCreateInfo->sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  devCreateInfo->queueCreateInfoCount =
-      (devInfo->graphicsQueue.famIndex == devInfo->presentQueue.famIndex) ? 1
-                                                                          : 2;
-
-  static char const *exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-  devCreateInfo->enabledExtensionCount = sizeof(exts) / sizeof(exts[0]);
-  devCreateInfo->ppEnabledExtensionNames = exts;
-
-  static const float prio = 1.f;
-  VkDeviceQueueCreateInfo q{};
-  q.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  q.queueCount = 1;
-  q.queueFamilyIndex = devInfo->graphicsQueue.famIndex;
-  q.pQueuePriorities = &prio;
-  qCreateInfos->push_back(q);
-
-  if (devInfo->graphicsQueue.famIndex != devInfo->presentQueue.famIndex) {
-    q.queueFamilyIndex = devInfo->presentQueue.famIndex;
-    qCreateInfos->push_back(q);
-  }
-  devCreateInfo->pQueueCreateInfos = qCreateInfos->data();
-
-  features->wideLines = VK_TRUE;
-  features->logicOp = VK_TRUE;
-}
-
-bool selectOptimalDevice(
-    std::unordered_map<VkPhysicalDevice, DeviceInfo> const &devs,
-    std::unordered_map<VkPhysicalDevice, DeviceInfo>::const_iterator *const
-        best) {
-
-  *best = devs.begin();
-  for (auto it = devs.begin(); it != devs.end(); ++it) {
-    auto const cMaxSize = (*best)->second.props.limits.maxImageDimension2D;
-    auto const itMaxSize = it->second.props.limits.maxImageDimension2D;
-    auto const &itFeats = it->second.feats;
-
-    if (itMaxSize > cMaxSize && itFeats.wideLines == VK_TRUE)
-      *best = it;
-  }
-
-  if (*best == devs.end())
+bool createVulkanDevice(VulkanBackend *const handle) {
+  if (!handle)
     return false;
-  return true;
-}
 
-bool queryEligibleDevices(
-    VkInstance const instance,
-    std::unordered_map<VkPhysicalDevice, DeviceInfo> *const out) {
+  handle->device = std::make_unique<VulkanDevice>();
+  VkDeviceCreateInfo info{};
+  info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  VkPhysicalDeviceSynchronization2Features sync2{};
+  VkPhysicalDeviceDynamicRenderingFeatures dynamicR{};
+  VkPhysicalDeviceFeatures2 features{};
+  features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+  dynamicR.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+  dynamicR.dynamicRendering = VK_TRUE;
+  sync2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+  sync2.synchronization2 = VK_TRUE;
+  sync2.pNext = &dynamicR;
+  features.pNext = &sync2;
+  features.features.samplerAnisotropy = VK_TRUE;
 
-  std::vector<VkPhysicalDevice> devs{};
-  if (!queryDevices(instance, &devs)) {
+  char const *exts[] = {"VK_KHR_swapchain"};
+  info.ppEnabledExtensionNames = exts;
+  info.enabledExtensionCount = sizeof(exts) / sizeof(exts[0]);
+
+  uint32_t count;
+  std::vector<VkPhysicalDevice> devices;
+  auto const instance = handle->instance->handle.get();
+  if (auto r = vkEnumeratePhysicalDevices(instance, &count, 0);
+      r != VK_SUCCESS) {
+    addErrMsg(handle->logs, __func__, "Failed to enumerate devices");
     return false;
   }
+  devices.resize(count);
+  vkEnumeratePhysicalDevices(instance, &count, devices.data());
 
-  for (auto device : devs) {
-    bool graphicsFound = false, presentFound = false;
-    DeviceInfo info{};
-    queryDeviceInfo(device, &info);
+  struct DevInfo {
+    uint32_t graphicsFam, presentFam;
+    VkPhysicalDevice device;
+    uint32_t maxImgSize;
+    std::string devName;
+    float maxAnisotropy;
+  };
 
-    for (std::size_t i = 0; i < info.queues.size(); ++i) {
-      if (graphicsFound && presentFound)
-        break;
+  std::vector<DevInfo> minCapDevs;
+  for (auto dev : devices) {
+    VkPhysicalDeviceSynchronization2Features sync2{};
+    VkPhysicalDeviceDynamicRenderingFeatures dynamicR{};
+    dynamicR.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    sync2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    VkPhysicalDeviceFeatures2 f2{};
+    f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    sync2.pNext = &dynamicR;
+    f2.pNext = &sync2;
+    vkGetPhysicalDeviceFeatures2(dev, &f2);
 
-      if (!graphicsFound && info.queues[i].queueCount &&
-          info.queues[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-        graphicsFound = true;
+    if (dynamicR.dynamicRendering == VK_FALSE)
+      continue;
+    if (sync2.synchronization2 == VK_FALSE)
+      continue;
+    if (f2.features.multiDrawIndirect == VK_FALSE)
+      continue;
+    if (f2.features.samplerAnisotropy == VK_FALSE)
+      continue;
 
-      if (presentFound)
+    VkPhysicalDeviceProperties p{};
+    vkGetPhysicalDeviceProperties(dev, &p);
+    if (p.limits.maxImageDimension2D < 1920)
+      continue;
+
+    vkGetPhysicalDeviceQueueFamilyProperties(dev, &count, 0);
+    std::vector<VkQueueFamilyProperties> q(count, VkQueueFamilyProperties{});
+    vkGetPhysicalDeviceQueueFamilyProperties(dev, &count, q.data());
+
+    std::vector<std::uint32_t> graphics, present;
+    for (std::size_t i = 0; i < q.size(); ++i) {
+      if (!(q[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
         continue;
-
-      if (glfwGetPhysicalDevicePresentationSupport(instance, device, i) ==
-          GLFW_TRUE)
-        presentFound = true;
+      graphics.push_back(i);
+    }
+    for (std::size_t i = 0; i < q.size(); ++i) {
+      if (glfwGetPhysicalDevicePresentationSupport(instance, dev, i) ==
+          GLFW_FALSE)
+        continue;
+      present.push_back(i);
     }
 
-    if (graphicsFound && presentFound)
-      out->emplace(device, std::move(info));
+    if (!graphics.size() || !present.size())
+      continue;
+
+    minCapDevs.push_back({.graphicsFam = graphics.front(),
+                          .presentFam = present.front(),
+                          .device = dev,
+                          .maxImgSize = p.limits.maxImageDimension2D,
+                          .devName = p.deviceName,
+                          .maxAnisotropy = p.limits.maxSamplerAnisotropy});
   }
 
+  if (!minCapDevs.size()) {
+    addErrMsg(handle->logs, __func__, "No eligible device available");
+    return false;
+  }
+
+  DevInfo *best = nullptr;
+  if (!handle->generalInfo->preferredGPU.size()) {
+    uint32_t maxSz;
+    for (auto &dev : minCapDevs) {
+      if (dev.maxImgSize > maxSz) {
+        maxSz = dev.maxImgSize;
+        best = &dev;
+      }
+    }
+  } else {
+    std::regex gpuName{handle->generalInfo->preferredGPU};
+    for (auto &dev : minCapDevs)
+      if (std::regex_match(dev.devName, gpuName)) {
+        handle->generalInfo->preferredGPU = dev.devName;
+        best = &dev;
+        break;
+      }
+    if (!best) {
+      addErrMsg(handle->logs,
+                __func__,
+                "The preferred GPU does not meet the requirements: " +
+                    handle->generalInfo->preferredGPU);
+      return false;
+    }
+  }
+
+  float prio = 1.f;
+  std::vector<VkDeviceQueueCreateInfo> qInfo;
+  qInfo.push_back({});
+  qInfo.back().sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  qInfo.back().queueCount = 1;
+  qInfo.back().pQueuePriorities = &prio;
+  qInfo.back().queueFamilyIndex = best->graphicsFam;
+
+  if (best->graphicsFam != best->presentFam) {
+    qInfo.push_back({});
+    qInfo.back().sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    qInfo.back().queueCount = 1;
+    qInfo.back().pQueuePriorities = &prio;
+    qInfo.back().queueFamilyIndex = best->graphicsFam;
+  }
+
+  info.queueCreateInfoCount = (best->graphicsFam == best->presentFam ? 1 : 2);
+  info.pQueueCreateInfos = qInfo.data();
+  info.pNext = &features;
+
+  addInfMsg(handle->logs, __func__, "Selected device: " + best->devName);
+
+  VkDevice logical{};
+  auto result = vkCreateDevice(best->device, &info, 0, &logical);
+  if (result != VK_SUCCESS) {
+    addErrMsg(handle->logs,
+              __func__,
+              "Failed to create device with error code: " +
+                  std::to_string(result));
+    return false;
+  }
+
+  handle->device->handle = {logical,
+                            [](auto *ptr) { vkDestroyDevice(ptr, 0); }};
+  VkQueue pres, graph;
+  vkGetDeviceQueue(logical, best->graphicsFam, 0, &graph);
+  vkGetDeviceQueue(logical, best->presentFam, 0, &pres);
+  handle->device->presentation = pres;
+  handle->device->graphics = graph;
+  handle->device->physical = best->device;
+  handle->device->graphicsFamilyIndex = best->graphicsFam;
+  handle->device->presentationFamilyIndex = best->presentFam;
+  handle->device->maxAnisotropy = best->maxAnisotropy;
   return true;
 }
 
-void queryDeviceInfo(VkPhysicalDevice_T *const handle, DeviceInfo *const info) {
-  uint32_t count{};
-
-  vkEnumerateDeviceExtensionProperties(handle, 0, &count, 0);
-  info->exts.resize(count);
-  vkEnumerateDeviceExtensionProperties(handle, 0, &count, info->exts.data());
-
-  vkGetPhysicalDeviceFeatures(handle, &info->feats);
-  vkGetPhysicalDeviceProperties(handle, &info->props);
-
-  vkGetPhysicalDeviceQueueFamilyProperties(handle, &count, 0);
-  info->queues.resize(count);
-  vkGetPhysicalDeviceQueueFamilyProperties(handle, &count, info->queues.data());
-}
-
-bool queryDevices(VkInstance const instance,
-                  std::vector<VkPhysicalDevice> *const out) {
-  std::vector<VkPhysicalDevice> devs{};
-  uint32_t count{};
-
-  vkEnumeratePhysicalDevices(instance, &count, 0);
-  if (!count)
+bool enableValidationLayers(VulkanBackend *const handle) {
+  if (!handle)
     return false;
 
-  devs.resize(count);
-  vkEnumeratePhysicalDevices(instance, &count, devs.data());
+  if (!handle->generalInfo) {
+    addErrMsg(handle->logs, __func__, "generalInfo = nullptr");
+    return false;
+  }
 
-  *out = std::move(devs);
+  handle->generalInfo->enableValidationLayers = true;
   return true;
 }
 
-bool render(VulkanBackend *const backend,
-            unsigned long const indexCount,
-            unsigned long const instanceCount) {
-  if (!backend)
+bool setPreferredGPU(VulkanBackend *const handle, char const *const p) {
+  if (!handle)
     return false;
 
-  VkCommandBuffer const cmd = backend->window->graphicsBuf;
-  auto const dev = backend->device->handle.get();
-
-  uint32_t img{};
-  if (!getNextImage(backend, &img)) {
-    addErrMsg(backend, "render: Failed to acquire image");
+  if (!p) {
+    addErrMsg(handle->logs, __func__, "The GPU name handle = nullptr");
     return false;
   }
 
-  VkCommandBufferBeginInfo cbi{};
-  cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  auto r = vkBeginCommandBuffer(cmd, &cbi);
-  if (r != VK_SUCCESS) {
-    addErrMsg(backend, "render: Failed to begin command buffer");
-    return false;
-  }
-
-  if (!setRenderBarriers(backend, backend->window->swapImages[img])) {
-    addErrMsg(backend, "render: Failed to set memory barriers");
-    return false;
-  }
-
-  VkRenderingAttachmentInfo colorAttachment{};
-  VkRenderingAttachmentInfo depthAttachment{};
-  VkRenderingInfo renderingInfo{};
-
-  if (!setupRenderingInfo(
-          backend, &renderingInfo, &colorAttachment, &depthAttachment, img)) {
-    addErrMsg(backend, "render: Failed to setup rendering info");
-    return false;
-  }
-
-  vkCmdBeginRendering(cmd, &renderingInfo);
-
-  auto const pipe = backend->pipelines[backend->window->activePipeline].get();
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
-
-  VkViewport const vp{.x = 0,
-                      .y = 0,
-                      .width = float(backend->window->width),
-                      .height = float(backend->window->height),
-                      .minDepth = 0.f,
-                      .maxDepth = 1.f};
-  vkCmdSetViewportWithCount(cmd, 1, &vp);
-
-  VkRect2D const sc{
-      .offset = {0, 0},
-      .extent = {backend->window->width, backend->window->height}};
-  vkCmdSetScissorWithCount(cmd, 1, &sc);
-
-  auto const layout =
-      backend->pipelineLayouts[backend->window->activePipelineLayout].get();
-  vkCmdPushConstants(cmd,
-                     layout,
-                     VK_SHADER_STAGE_VERTEX_BIT,
-                     0,
-                     sizeof(backend->camMats),
-                     &backend->camMats);
-
-  auto const vertexBuf = backend->vertexBuf.get();
-  VkDeviceSize const offsets[] = {0};
-  vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuf, offsets);
-
-  VkDescriptorBufferInfo bufInf{};
-  bufInf.buffer = backend->instanceBuf.get();
-  bufInf.offset = 0;
-  bufInf.range = instanceCount * sizeof(InstanceTransform);
-
-  auto const descSet = backend->descSets.at(0);
-  VkWriteDescriptorSet descriptorWrite = {};
-  descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  descriptorWrite.dstSet = descSet;
-  descriptorWrite.dstBinding = 0;
-  descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  descriptorWrite.descriptorCount = 1;
-  descriptorWrite.pBufferInfo = &bufInf;
-  descriptorWrite.dstArrayElement = 0;
-  std::vector<VkWriteDescriptorSet> writeInfo(VulkanBackend::maxDescriptors,
-                                              descriptorWrite);
-
-  for (std::size_t i = 0; i < VulkanBackend::maxDescriptors; ++i)
-    writeInfo[i].dstArrayElement = i;
-
-  vkUpdateDescriptorSets(dev, writeInfo.size(), writeInfo.data(), 0, nullptr);
-  vkCmdBindDescriptorSets(
-      cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1, &descSet, 0, 0);
-
-  vkCmdBindIndexBuffer(cmd, backend->indexBuf.get(), 0, VK_INDEX_TYPE_UINT32);
-
-  vkCmdDrawIndexed(cmd, indexCount, instanceCount, 0, 0, 0);
-
-  vkCmdEndRendering(cmd);
-  vkEndCommandBuffer(cmd);
-
-  auto const fence = backend->window->fence.get();
-  if (!submitDrawCalls(backend, img)) {
-    addErrMsg(backend, "render: Failed to submit draw calls");
-    return false;
-  }
-
-  r = vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
-  if (r != VK_SUCCESS) {
-    addErrMsg(backend, "render: Failed to wait for fence", r);
-    return false;
-  }
-
-  r = vkResetFences(dev, 1, &fence);
-  if (r != VK_SUCCESS) {
-    addErrMsg(backend, "render: Failed to reset fence", r);
-    return false;
-  }
-
-  if (!present(backend, img)) {
-    addErrMsg(backend, "render: Failed to present image");
-    return false;
-  }
-
+  handle->generalInfo->preferredGPU = p;
   return true;
 }
 
-bool setupRenderingInfo(VulkanBackend *const backend,
-                        VkRenderingInfo *const renderingInfo,
-                        VkRenderingAttachmentInfo *const color,
-                        VkRenderingAttachmentInfo *const depth,
-                        uint32_t const img) {
-  if (!backend)
+bool setApplicationName(VulkanBackend *const handle, char const *const p) {
+  if (!handle)
     return false;
 
-  if (!renderingInfo) {
-    addErrMsg(backend,
-              "setupRenderingInfo: The parameter 'renderingInfo' = nullptr");
+  if (!p) {
+    addErrMsg(handle->logs, __func__, "The application name handle = nullptr");
     return false;
   }
 
-  if (!color) {
-    addErrMsg(backend, "setupRenderingInfo: The parameter 'color' = nullptr");
-    return false;
-  }
-
-  if (!depth) {
-    addErrMsg(backend, "setupRenderingInfo: The parameter 'depth' = nullptr");
-    return false;
-  }
-
-  *color = VkRenderingAttachmentInfo{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .pNext = 0,
-      .imageView = backend->window->swapImgViews[img].get(),
-      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-      .resolveMode = {},
-      .resolveImageView = {},
-      .resolveImageLayout = {},
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = {.color = VkClearColorValue{.float32{0.f, 0.f, 0.f, 1.f}}}};
-
-  *depth = VkRenderingAttachmentInfo{
-      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .pNext = 0,
-      .imageView = backend->window->depthImgView.get(),
-      .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-      .resolveMode = {},
-      .resolveImageView = {},
-      .resolveImageLayout = {},
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = {.depthStencil =
-                         VkClearDepthStencilValue{.depth = 1.f, .stencil = 0}}};
-
-  renderingInfo->sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-  renderingInfo->renderArea = {
-      {0, 0}, {backend->window->width, backend->window->height}};
-  renderingInfo->layerCount = 1;
-  renderingInfo->colorAttachmentCount = 1;
-  renderingInfo->pColorAttachments = color;
-  renderingInfo->pDepthAttachment = depth;
+  handle->generalInfo->appName = p;
   return true;
 }
 
-bool getNextImage(VulkanBackend *const backend, uint32_t *const imgIndex) {
-  if (!backend)
-    return false;
+bool enableExtensions(VulkanBackend *const handle,
+                      VkInstanceCreateInfo *const info,
+                      char const **const extensions,
+                      unsigned const size) {
+  static char const *layers[] = {"VK_LAYER_KHRONOS_validation"};
+  static unsigned const sz = sizeof(layers) / sizeof(layers[0]);
 
-  auto const acquireDone = backend->window->acquireSem.get();
-  auto const swp = backend->window->swapchain.get();
-  auto const dev = backend->device->handle.get();
+  if (handle->generalInfo->enableValidationLayers) {
+    info->ppEnabledLayerNames = layers;
+    info->enabledLayerCount = sz;
+  }
 
-  uint32_t img{};
-  auto r = vkAcquireNextImageKHR(dev, swp, UINT64_MAX, acquireDone, 0, &img);
-  if (r != VK_SUCCESS) {
-    addErrMsg(backend, "getNextImage: Fetching swapchain image failed", r);
+  std::vector<VkExtensionProperties> properties;
+  uint32_t count;
+
+  auto result = vkEnumerateInstanceExtensionProperties(0, &count, 0);
+  if (result != VK_SUCCESS) {
+    std::string errCode = string_VkResult(result);
+    addErrMsg(handle->logs,
+              __func__,
+              "Failed to enumerate instance extensions with error code: " +
+                  errCode);
     return false;
   }
 
-  *imgIndex = img;
-  return true;
-}
-
-bool setRenderBarriers(VulkanBackend *const backend, VkImage const image) {
-  if (!backend)
-    return false;
-
-  VkCommandBuffer const cmd = backend->window->graphicsBuf;
-  VkImageMemoryBarrier2 barrier{}, barrier2{};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-  barrier.image = image;
-  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-  barrier2 = barrier;
-  VkDependencyInfo depInfo{};
-  depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-  depInfo.imageMemoryBarrierCount = 1;
-  VkImageMemoryBarrier2 barriers[] = {barrier, barrier2};
-  depInfo.pImageMemoryBarriers = barriers;
-
-  barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-  barrier.srcAccessMask = VK_ACCESS_2_NONE;
-  barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-  barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-  barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-
-  barrier2.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-  barrier2.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-  barrier2.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
-  barrier2.dstAccessMask = VK_ACCESS_2_NONE;
-  barrier2.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-  barrier2.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-  vkCmdPipelineBarrier2(cmd, &depInfo);
-  return true;
-}
-
-bool submitDrawCalls(VulkanBackend *const backend, uint32_t const imageIndex) {
-  if (!backend)
-    return false;
-
-  auto const renderDone = backend->window->renderSem[imageIndex].get();
-  auto const acquireDone = backend->window->acquireSem.get();
-  auto const fence = backend->window->fence.get();
-
-  VkSubmitInfo2 submitInfo{};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-
-  submitInfo.commandBufferInfoCount = 1;
-  VkCommandBufferSubmitInfo cbsi{};
-  cbsi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-  cbsi.commandBuffer = backend->window->graphicsBuf;
-  submitInfo.pCommandBufferInfos = &cbsi;
-
-  submitInfo.waitSemaphoreInfoCount = 1;
-  VkSemaphoreSubmitInfo wsi{};
-  wsi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-  wsi.semaphore = acquireDone;
-  wsi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-  submitInfo.pWaitSemaphoreInfos = &wsi;
-
-  submitInfo.signalSemaphoreInfoCount = 1;
-  VkSemaphoreSubmitInfo ssi{};
-  ssi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-  ssi.semaphore = renderDone;
-  ssi.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-  submitInfo.pSignalSemaphoreInfos = &ssi;
-
-  auto r = vkQueueSubmit2(backend->device->graphics, 1, &submitInfo, fence);
-  if (r != VK_SUCCESS) {
-    addErrMsg(backend, "submitDrawCalls: Failed to submit commands", r);
+  properties.resize(count);
+  result = vkEnumerateInstanceExtensionProperties(0, &count, properties.data());
+  if (result != VK_SUCCESS) {
+    std::string errCode = string_VkResult(result);
+    addErrMsg(handle->logs,
+              __func__,
+              "Failed to enumerate instance extensions with error code: " +
+                  errCode);
     return false;
   }
 
-  return true;
-}
+  std::vector<std::string> requiredInstanceExtensions;
+  for (auto const &req : requiredInstanceExtensions) {
+    std::string missing;
+    for (auto const &ext : properties) {
+      if (req == std::string{ext.extensionName}) {
+        missing = req;
+        break;
+      }
+    }
 
-bool present(VulkanBackend *const backend, uint32_t const imageIndex) {
-  if (!backend)
-    return false;
-
-  auto const renderDone = backend->window->renderSem[imageIndex].get();
-  auto const swp = backend->window->swapchain.get();
-
-  VkPresentInfoKHR presentInfo{};
-  presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  presentInfo.waitSemaphoreCount = 1;
-  presentInfo.pWaitSemaphores = &renderDone;
-  presentInfo.swapchainCount = 1;
-  presentInfo.pSwapchains = &swp;
-  presentInfo.pImageIndices = &imageIndex;
-
-  auto r = vkQueuePresentKHR(backend->device->present, &presentInfo);
-  if (r != VK_SUCCESS) {
-    addErrMsg(backend, "present: Failed to queue presentation", r);
-    return false;
+    if (missing.size()) {
+      addErrMsg(handle->logs,
+                __func__,
+                "The required instance extension is missing: " + missing);
+      return false;
+    }
   }
 
+  info->ppEnabledExtensionNames = extensions;
+  info->enabledExtensionCount = size;
   return true;
 }
 
-void storeMissingInstanceExts(std::vector<std::string> const *const requested,
-                              std::vector<std::string> *const missing) {
-
-  uint32_t availExtCount{};
-  std::vector<VkExtensionProperties> avail{};
-
-  vkEnumerateInstanceExtensionProperties(0, &availExtCount, 0);
-  avail.resize(availExtCount);
-  vkEnumerateInstanceExtensionProperties(0, &availExtCount, avail.data());
-
-  std::vector<std::string> available{};
-  for (auto const &e : avail)
-    available.push_back(e.extensionName);
-
-  *missing = subtract<std::string>(available, *requested);
-}
-
-bool createInstance(VulkanBackend *const backend) {
+bool createVulkanInstance(VulkanBackend *const handle) {
   VkInstanceCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-
   VkApplicationInfo app{};
   app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-  app.pApplicationName = backend->appName.c_str();
-  app.apiVersion = VulkanBackend::VULKAN_API_VERSION;
-  info.pApplicationInfo = &app;
+  app.pApplicationName = handle->generalInfo->appName.c_str();
+  app.pEngineName = "BADLINE";
+  app.engineVersion = VK_MAKE_VERSION(0, 1, 0);
+  app.apiVersion = BackendInfo::MIN_REQUIRED_VK_API_VERSION;
 
-  info.ppEnabledExtensionNames =
-      glfwGetRequiredInstanceExtensions(&info.enabledExtensionCount);
+  std::vector<std::string> requiredInstanceExtensions;
+  uint32_t count{};
+  char const *const *const glfwExts = glfwGetRequiredInstanceExtensions(&count);
+  for (uint32_t i = 0; i < count; ++i)
+    requiredInstanceExtensions.push_back(glfwExts[i]);
 
-  backend->instance = std::make_unique<Instance>();
-  auto &requestedExts = backend->instance->requestedExts;
-  auto &missingReqExts = backend->instance->missingReqExts;
+  std::vector<char const *> extensions;
+  for (auto const &ext : requiredInstanceExtensions)
+    extensions.push_back(ext.c_str());
 
-  for (uint32_t i = 0; i < info.enabledExtensionCount; ++i)
-    requestedExts.push_back(info.ppEnabledExtensionNames[i]);
-
-  storeMissingInstanceExts(&requestedExts, &missingReqExts);
-
-  char const *validation[] = {"VK_LAYER_KHRONOS_validation"};
-  info.ppEnabledLayerNames = backend->validation ? validation : nullptr;
-  info.enabledLayerCount = backend->validation ? 1 : 0;
-
-  VkInstance handle{};
-  auto result = vkCreateInstance(&info, nullptr, &handle);
-  if (result != VK_SUCCESS) {
-    addErrMsg(backend, "Failed to create vulkan instance", result);
+  if (!enableExtensions(handle, &info, extensions.data(), extensions.size())) {
+    addErrMsg(handle->logs, __func__, "Failed to enable extensions / layers");
     return false;
   }
 
-  backend->instance->handle = {
-      handle, [](VkInstance ptr) { vkDestroyInstance(ptr, nullptr); }};
+  info.pApplicationInfo = &app;
+  VkInstance instance{};
 
+  auto result = vkCreateInstance(&info, 0, &instance);
+  if (result != VK_SUCCESS) {
+    std::string errCode = string_VkResult(result);
+    addErrMsg(handle->logs, __func__, "Failed with error code: " + errCode);
+    return false;
+  }
+
+  handle->instance = std::make_unique<VulkanInstance>();
+  handle->instance->handle = {instance,
+                              [](auto *p) { vkDestroyInstance(p, 0); }};
   return true;
 }
 
-bool createShaderModule(VulkanBackend *const backend,
-                        std::string const &spirvFile,
-                        UniqueRes<VkShaderModule_T> *const out) {
+bool getVersionOfAPI(VulkanBackend const *const backend,
+                     unsigned *const version) {
   if (!backend)
     return false;
-
-  if (!out) {
-    addErrMsg(backend, "createShaderModule: The parameter 'out' = nullptr");
+  if (!version) {
+    addErrMsg(backend->logs, __func__, "The output handle = nullptr");
     return false;
   }
-
-  std::ifstream in{spirvFile, std::ios::ate | std::ios::binary};
-  std::vector<uint32_t> byteCode{};
-
-  if (!in.is_open()) {
-    addErrMsg(
-        backend,
-        "createShaderModule: Failed to open shader module byte code file: " +
-            spirvFile);
-    return false;
-  }
-
-  VkDevice device{};
-  if (!getLogicalDevice(backend, &device)) {
-    addErrMsg(backend, "createShaderModule: Failed to get logical device");
-    return false;
-  }
-
-  std::size_t const dataSize = in.tellg(); // In bytes
-  byteCode.resize(dataSize / sizeof(uint32_t));
-  in.seekg(0);
-  in.read(reinterpret_cast<char *>(byteCode.data()), dataSize);
-
-  VkShaderModuleCreateInfo info{};
-  info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-  info.codeSize = dataSize;
-  info.pCode = byteCode.data();
-  VkShaderModule shader{};
-  auto result = vkCreateShaderModule(device, &info, 0, &shader);
-
-  if (result != VK_SUCCESS) {
-    addErrMsg(
-        backend, "createShaderModule: Failed to create shader module", result);
-    return false;
-  }
-
-  *out = {shader, [device](VkShaderModule_T *const p) {
-            vkDestroyShaderModule(device, p, 0);
-          }};
-
+  *version = BackendInfo::MIN_REQUIRED_VK_API_VERSION;
   return true;
 }
+
+bool getVulkanInstance(VulkanBackend const *const backend,
+                       VkInstance *const instance) {
+  if (!backend)
+    return false;
+  if (!instance) {
+    addErrMsg(backend->logs, __func__, "The output handle = nullptr");
+    return false;
+  }
+  if (!backend->instance) {
+    addErrMsg(backend->logs, __func__, "The backend instance handle = nullptr");
+    return false;
+  }
+  *instance = backend->instance->handle.get();
+  return true;
+}
+
+bool getPhysicalDevice(VulkanBackend const *const backend,
+                       VkPhysicalDevice *const physical) {
+  if (!backend)
+    return false;
+  if (!physical) {
+    addErrMsg(backend->logs, __func__, "The output handle = nullptr");
+    return false;
+  }
+  if (!backend->device->physical) {
+    addErrMsg(backend->logs,
+              __func__,
+              "The backend physical device handle = nullptr");
+    return false;
+  }
+  *physical = backend->device->physical;
+  return true;
+}
+
+bool getLogicalDevice(VulkanBackend const *const backend,
+                      VkDevice *const logical) {
+  if (!backend)
+    return false;
+  if (!logical) {
+    addErrMsg(backend->logs, __func__, "The output handle = nullptr");
+    return false;
+  }
+  if (!backend->device->handle.get()) {
+    addErrMsg(backend->logs, __func__, "The backend device handle = nullptr");
+    return false;
+  }
+  *logical = backend->device->handle.get();
+  return true;
+}
+
+bool createVulkanAllocator(VulkanBackend *const backend,
+                           CustomUniqPtr<VmaAllocator_T> *const allocator);
+
+bool allocateMemory(VulkanBackend *const handle) {
+  if (!handle)
+    return false;
+  if (!handle->device) {
+    addErrMsg(handle->logs, __func__, "The backend device is not initialized");
+    return false;
+  }
+
+  if (!createVulkanAllocator(handle, &handle->device->allocator)) {
+    addErrMsg(handle->logs, __func__, "Failed to create allocator");
+    return false;
+  }
+
+  VkDevice dev;
+  if (!getLogicalDevice(handle, &dev)) {
+    addErrMsg(handle->logs, __func__, "Failed to get logical device");
+    return false;
+  }
+
+  VmaAllocator allocator = handle->device->allocator.get();
+  VmaAllocationInfo allocInfo;
+  VmaAllocation alloc;
+
+  if (!createStagingBuffer(handle,
+                           64 * 1024 * 1024, // 64 MiB
+                           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                           &handle->device->stagingBuffer.handle,
+                           &alloc)) {
+    addErrMsg(handle->logs, __func__, "Failed to create staging buffer");
+    return false;
+  }
+
+  vmaGetAllocationInfo(allocator, alloc, &allocInfo);
+  handle->device->stagingBuffer.allocInfo = allocInfo;
+
+  if (!createBuffer(handle,
+                    sizeof(glm::mat4),
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+                        VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                        VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                    &handle->device->camProjBuffer.handle,
+                    &alloc)) {
+    addErrMsg(handle->logs, __func__, "Failed to create cam proj buffer");
+    return false;
+  }
+  vmaGetAllocationInfo(allocator, alloc, &allocInfo);
+  handle->device->camProjBuffer.allocInfo = allocInfo;
+
+  glm::mat4 projection{1.f};
+  std::memcpy(handle->device->camProjBuffer.allocInfo.pMappedData,
+              &projection,
+              sizeof(projection));
+  return true;
+}
+
+bool initialize(VulkanBackend *const handle) {
+  if (!handle)
+    return false;
+
+  if (!createVulkanInstance(handle)) {
+    addErrMsg(handle->logs, __func__, "Failed to create Vulkan instance");
+    return false;
+  }
+
+  if (!createVulkanDevice(handle)) {
+    addErrMsg(handle->logs, __func__, "Failed to create Vulkan device");
+    return false;
+  }
+
+  if (!createCommandPool(handle,
+                         handle->device->graphicsFamilyIndex,
+                         &handle->device->cmdPool)) {
+    addErrMsg(handle->logs, __func__, "Failed to create general command pool");
+    return false;
+  }
+
+  if (!allocateMemory(handle)) {
+    addErrMsg(handle->logs, __func__, "Failed to allocate device buffers");
+    return false;
+  }
+
+  if (!createImageSampler(handle)) {
+    addErrMsg(handle->logs, __func__, "Failed to create image sampler");
+    return false;
+  }
+
+  if (!createDescriptorPoolAndLayouts(handle)) {
+    addErrMsg(handle->logs, __func__, "Failed to create descriptors");
+    return false;
+  }
+
+  if (!createPipelineLayouts(handle)) {
+    addErrMsg(handle->logs, __func__, "Failed to create pipeline layout");
+    return false;
+  }
+
+  if (!createGraphicsPipeline(handle)) {
+    addErrMsg(handle->logs, __func__, "Failed to create graphics pipeline");
+    return false;
+  }
+  return true;
+}
+
+void create(Logs *const l, VulkanBackend **const handle) {
+  if (!l || !handle)
+    return;
+  auto guard = std::make_unique<VulkanBackend>(l);
+  if (!guard)
+    return;
+
+  guard->generalInfo = std::make_unique<BackendInfo>();
+  if (!guard->generalInfo)
+    return;
+
+  std::unique_ptr<VulkanDevice> *devPtr = &guard->device;
+  guard->resourceUsageDoneGuard = {malloc(1), [devPtr](auto *const p) {
+                                     free(p);
+                                     if (devPtr->get() && devPtr->get()->handle)
+                                       vkDeviceWaitIdle(
+                                           devPtr->get()->handle.get());
+                                   }};
+
+  if (!guard->resourceUsageDoneGuard)
+    return;
+  *handle = guard.release();
+}
+
+void destroy(VulkanBackend *const handle) { delete handle; }
 } // namespace re
