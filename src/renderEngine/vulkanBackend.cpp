@@ -19,13 +19,33 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/vulkanBackend.hpp>
-#include <badline/subtract.hpp>
 #include "vulkanBackend.hpp"
 #include <unordered_map>
 #include "error.hpp"
 #include <fstream>
 
 namespace re {
+template <typename T, template <typename> typename C>
+std::vector<T> subtract(C<T> const &minuend, C<T> const &subtrahend) {
+  std::vector<T> difference{};
+
+  for (auto const &minuendElement : minuend) {
+    bool exists = false;
+
+    for (auto const &subtrahendElement : subtrahend) {
+      if (minuendElement == subtrahendElement) {
+        exists = true;
+        break;
+      }
+    }
+
+    if (!exists)
+      difference.push_back(minuendElement);
+  }
+
+  return difference;
+}
+
 bool getInstanceBuffer(VulkanBackend *const backend,
                        UniqueRes<VkBuffer_T> **const p) {
   *p = &backend->instanceBuf;
@@ -1365,13 +1385,13 @@ bool render(VulkanBackend *const backend,
 
   r = vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
   if (r != VK_SUCCESS) {
-    addErrMsg(backend, "render: Failed to wait for fence");
+    addErrMsg(backend, "render: Failed to wait for fence", r);
     return false;
   }
 
   r = vkResetFences(dev, 1, &fence);
   if (r != VK_SUCCESS) {
-    addErrMsg(backend, "render: Failed to reset fence");
+    addErrMsg(backend, "render: Failed to reset fence", r);
     return false;
   }
 
