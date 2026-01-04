@@ -27,6 +27,7 @@ endfunction()
 include_directories(/usr/local/include)
 include_directories(include)
 add_subdirectory(src)
+add_subdirectory(doc)
 
 if (BUILD_TARGET_TESTS)
 	add_subdirectory(test)

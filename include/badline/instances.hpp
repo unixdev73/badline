@@ -18,15 +18,20 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include <glm/glm.hpp>
+
 namespace re {
-struct InstanceTransform;
 struct Instances;
 
 bool reserve(Instances *const handle, unsigned long const size);
 
 bool clear(Instances *const handle);
 
-bool addInstance(Instances *const handle, InstanceTransform **const p);
+bool addInstance(Instances *const handle, unsigned long *const p);
+
+bool setTransform(Instances *const handle,
+                  unsigned long const instanceId,
+                  glm::mat4 const *const transform);
 
 bool getData(Instances const *const handle,
              void const **const data,

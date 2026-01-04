@@ -59,7 +59,7 @@ struct Vertex {
   }
 };
 
-struct InstanceTransformData {
+struct InstanceTransform {
   glm::mat4 transform{};
 };
 

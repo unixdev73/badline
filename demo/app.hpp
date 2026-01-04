@@ -60,7 +60,8 @@ struct App {
   re::Window *win{};
 
   glm::mat4 proj{1.f}, view{1.f};
-  std::vector<glm::mat4> instanceTransforms{};
+  std::vector<glm::mat4> instanceRotations{};
+  std::vector<glm::mat4> instanceTranslations{};
 };
 
 bool initialize(App *const);

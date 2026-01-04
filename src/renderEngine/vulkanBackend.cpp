@@ -1329,7 +1329,7 @@ bool render(VulkanBackend *const backend,
   VkDescriptorBufferInfo bufInf{};
   bufInf.buffer = backend->instanceBuf.get();
   bufInf.offset = 0;
-  bufInf.range = instanceCount * sizeof(InstanceTransformData);
+  bufInf.range = instanceCount * sizeof(InstanceTransform);
 
   auto const descSet = backend->descSets.at(0);
   VkWriteDescriptorSet descriptorWrite = {};

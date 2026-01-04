@@ -1,6 +1,6 @@
-compilation_database_dir: build
+compilation_database_dir: ../badline_build
 
-output_directory: build/diagrams
+output_directory: ../badline_build/diagrams
 
 diagrams:
   argParser:

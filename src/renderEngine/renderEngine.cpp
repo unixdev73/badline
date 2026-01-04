@@ -68,10 +68,36 @@ bool getMatrix(TransformMatrix const *const handle, glm::mat4 *const p) {
   return true;
 }
 
-bool addInstance(Instances *const handle, InstanceTransform **const p) {
-  handle->transforms.push_back(
-      std::make_unique<InstanceTransform>(handle, handle->logs));
-  *p = handle->transforms.back().get();
+bool addInstance(Instances *const handle, unsigned long *const p) {
+  unsigned long id = handle->transformData.size();
+  handle->transformData.push_back(InstanceTransform{});
+  *p = id;
+  return true;
+}
+
+void addErrMsg(Instances const *const handle,
+               std::string const &msg,
+               VkResult r = VK_SUCCESS) {
+  addErrMsg(handle->logs, msg, r);
+}
+
+bool setTransform(Instances *const handle,
+                  unsigned long const instanceId,
+                  glm::mat4 const *const transform) {
+  if (!handle)
+    return false;
+
+  if (instanceId >= handle->transformData.size()) {
+    addErrMsg(handle, "setTransform: instance id > instance count");
+    return false;
+  }
+
+  if (!transform) {
+    addErrMsg(handle, "setTransform: transform = nullptr");
+    return false;
+  }
+
+  handle->transformData.at(instanceId).transform = *transform;
   return true;
 }
 
@@ -79,7 +105,7 @@ bool getData(Instances const *const handle,
              void const **const data,
              unsigned long *const size) {
   *data = handle->transformData.data();
-  *size = handle->transformData.size() * sizeof(InstanceTransformData);
+  *size = handle->transformData.size() * sizeof(InstanceTransform);
   return true;
 }
 
@@ -88,13 +114,6 @@ bool getInstanceCount(Instances const *const handle,
   *count = handle->transformData.size();
   return true;
 }
-
-bool setTransform(InstanceTransform *const handle, glm::mat4 *const p) {
-  handle->parent->transformData.push_back(InstanceTransformData{*p});
-  return true;
-}
-
-bool setColor(InstanceTransform *const, glm::vec4 *const) { return true; }
 
 bool addIndex(Indices *const handle, unsigned const p) {
   handle->indices.push_back(p);

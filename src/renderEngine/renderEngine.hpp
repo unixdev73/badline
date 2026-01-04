@@ -23,7 +23,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/transformMatrix.hpp>
 #include <badline/vertices.hpp>
 #include <badline/indices.hpp>
-#include <badline/instanceTransform.hpp>
 #include <badline/instances.hpp>
 #include "vulkanBackend.hpp"
 #include "error.hpp"
@@ -45,17 +44,10 @@ struct Indices {
   std::vector<uint32_t> indices{};
 };
 
-struct InstanceTransform {
-  InstanceTransform(Instances *p, ErrorLogs *l) : parent{p}, logs{l} {}
-  Instances *parent{};
-  mutable ErrorLogs *logs{};
-};
-
 struct Instances {
   Instances(ErrorLogs *p) : logs{p} {}
   mutable ErrorLogs *logs{};
-  std::vector<std::unique_ptr<InstanceTransform>> transforms{};
-  std::vector<InstanceTransformData> transformData{};
+  std::vector<InstanceTransform> transformData{};
 };
 
 struct TransformMatrix {

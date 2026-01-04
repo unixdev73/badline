@@ -23,7 +23,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/vertex.hpp>
 #include <badline/indices.hpp>
 #include <badline/instances.hpp>
-#include <badline/instanceTransform.hpp>
 #include <badline/transformMatrix.hpp>
 #include <badline/vulkanBackend.hpp>
 #include <badline/window.hpp>
@@ -74,14 +73,14 @@ bool createScene(App *const a) {
     glm::vec4 col{};
   };
   std::vector<VertData> vertData = {
-      {{-1.000000, 1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
-      {{-1.000000, -1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
-      {{1.000000, -1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
-      {{1.000000, 1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
-      {{-1.000000, 1.000000, -0.500000}, {1.f, 0.f, 0.f, 1.f}},
-      {{-1.000000, -1.000000, -0.500000}, {1.f, 0.f, 0.f, 1.f}},
-      {{1.000000, -1.000000, -0.500000}, {1.f, 0.f, 0.f, 1.f}},
-      {{1.000000, 1.000000, -0.500000}, {1.f, 0.f, 0.f, 1.f}},
+      {{0.000000, 2.000000, 2.000000}, {1.f, 0.f, 0.f, 1.f}},
+      {{0.000000, 0.000000, 2.000000}, {1.f, 0.f, 0.f, 1.f}},
+      {{2.000000, 0.000000, 2.000000}, {1.f, 0.f, 0.f, 1.f}},
+      {{2.000000, 2.000000, 2.000000}, {1.f, 0.f, 0.f, 1.f}},
+      {{0.000000, 2.000000, 0.000000}, {1.f, 0.f, 0.f, 1.f}},
+      {{0.000000, 0.000000, 0.000000}, {1.f, 0.f, 0.f, 1.f}},
+      {{2.000000, 0.000000, 0.000000}, {1.f, 0.f, 0.f, 1.f}},
+      {{2.000000, 2.000000, 0.000000}, {1.f, 0.f, 0.f, 1.f}},
   };
 
   for (auto &v : vertData) {
@@ -125,22 +124,16 @@ bool createScene(App *const a) {
     return false;
   }
 
-  a->instanceTransforms.resize(3);
+  a->instanceRotations.resize(3, glm::mat4(1));
+  a->instanceTranslations.resize(a->instanceRotations.size(), glm::mat4(1));
 
-  for (std::size_t i = 0; i < a->instanceTransforms.size(); ++i) {
-    auto m = glm::translate(glm::mat4(1), glm::vec3(-5.f + i * 5.f, -1.f, 0.f));
-    a->instanceTransforms[i] = m;
-
-    re::InstanceTransform *tr{};
-    if (!re::addInstance(instances, &tr)) {
-      std::cerr << "createScene: Failed to add instance" << std::endl;
+  for (auto const &m : a->instanceRotations) {
+    unsigned long id = 0;
+    if (!re::addInstance(instances, &id)) {
+      std::cerr << "createScene: Failed to add instance. " << std::endl;
       return false;
     }
-
-    if (!re::setTransform(tr, &m)) {
-      std::cerr << "createScene: Failed to set transform" << std::endl;
-      return false;
-    }
+    re::setTransform(instances, id, &m);
   }
 
   if (!re::uploadInstances(a->engine.get())) {
@@ -182,21 +175,20 @@ bool createScene(App *const a) {
 bool update(App *const a) {
   static const glm::mat4 rotX =
       glm::rotate(glm::mat4(1), 0.05f, glm::vec3(1, 0, 0));
-  // static const glm::mat4 rotY = glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0,
-  // 1, 0));
+  static const glm::mat4 rotY =
+      glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0, 1, 0));
   static const glm::mat4 rotZ =
       glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0, 0, 1));
 
-  for (std::size_t i = 0; i < a->instanceTransforms.size(); ++i) {
+  for (std::size_t i = 0; i < a->instanceRotations.size(); ++i) {
     switch (i % 3) {
     case 0:
-      a->instanceTransforms[i] = a->instanceTransforms[i] * rotX;
+      a->instanceRotations[i] = a->instanceRotations[i] * rotX;
       break;
     case 1:
-      // instances[i] = instances[i] * rotY;
       break;
     case 2:
-      a->instanceTransforms[i] = a->instanceTransforms[i] * rotZ;
+      a->instanceRotations[i] = a->instanceRotations[i] * rotZ;
       break;
     }
   }
@@ -207,17 +199,20 @@ bool update(App *const a) {
     return false;
   }
 
-  for (std::size_t i = 0; i < a->instanceTransforms.size(); ++i) {
-    auto m = glm::translate(glm::mat4(1), glm::vec3(float(i) / 50.f, 0.f, 0.f));
-    m = m * a->instanceTransforms[i];
+  for (std::size_t i = 0; i < a->instanceTranslations.size(); ++i) {
+    auto initTransl = glm::translate(glm::mat4(1), glm::vec3(-1.f, -1.f, -1.f));
+    a->instanceTranslations[i] =
+        glm::translate(glm::mat4(1), glm::vec3(-4.f + i * 4.f, 0.f, 0.f));
+    auto const m =
+        a->instanceTranslations[i] * a->instanceRotations[i] * initTransl;
 
-    re::InstanceTransform *tr{};
+    unsigned long tr{};
     if (!re::addInstance(instances, &tr)) {
       std::cerr << "update: Failed to add instance" << std::endl;
       return false;
     }
 
-    if (!re::setTransform(tr, &m)) {
+    if (!re::setTransform(instances, tr, &m)) {
       std::cerr << "update: Failed to set transform" << std::endl;
       return false;
     }
@@ -229,7 +224,7 @@ bool update(App *const a) {
   }
 
   re::TransformMatrix *viewTr{};
-  // a->view = a->view * rotY;
+  a->view = a->view * rotY;
   if (!re::createView(a->engine.get(), &viewTr)) {
     std::cerr << "createScene: Failed to create view. " << std::endl;
     return false;
