@@ -22,12 +22,12 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include "internals.hpp"
 
 namespace ap {
-void createArgParser(ArgParser **const handle) {
+void create(ArgParser **const handle) {
   if (handle)
     *handle = new ArgParser{};
 }
 
-void destroyArgParser(ArgParser const *const handle) { delete handle; }
+void destroy(ArgParser *const handle) { delete handle; }
 
 bool addFlag(ArgParser *const handle,
              char const *const argLongFormPtr,

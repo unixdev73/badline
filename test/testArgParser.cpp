@@ -19,18 +19,19 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/argParser.hpp>
-#include <iostream>
+#include <functional>
 #include <fstream>
+#include <iostream>
 #include <ranges>
 #include <vector>
 
 using SmartArgParser =
-    std::unique_ptr<ap::ArgParser, void (*)(ap::ArgParser const *const)>;
+    std::unique_ptr<ap::ArgParser, std::function<void(ap::ArgParser *const)>>;
 
 SmartArgParser createSmartArgParser() {
   ap::ArgParser *parser{};
-  ap::createArgParser(&parser);
-  return SmartArgParser{parser, ap::destroyArgParser};
+  ap::create(&parser);
+  return SmartArgParser{parser, ap::destroy};
 }
 
 void printErrorMessage(ap::ArgParser const *const parser) {

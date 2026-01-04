@@ -18,14 +18,18 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <glm/glm.hpp>
-
 namespace re {
-struct Vertex;
+struct Indices;
 
-bool setPosition(Vertex *const handle, glm::vec3 *const p);
-bool setColor(Vertex *const handle, glm::vec4 *const p);
+bool reserve(Indices *const handle, unsigned long const size);
 
-bool getPosition(Vertex const *const handle, glm::vec3 *const p);
-bool getColor(Vertex const *const handle, glm::vec4 *const p);
+bool addIndex(Indices *const handle, unsigned const index);
+
+bool clear(Indices *const handle);
+
+bool getData(Indices const *const handle,
+             void const **const data,
+             unsigned long *const size);
+
+bool getIndexCount(Indices const *const handle, unsigned long *const count);
 } // namespace re

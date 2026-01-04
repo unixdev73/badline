@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -19,23 +19,32 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "app.hpp"
-#include <GLFW/glfw3.h>
+#include <badline/vertices.hpp>
+#include <badline/vertex.hpp>
+#include <badline/indices.hpp>
+#include <badline/instances.hpp>
+#include <badline/instanceTransform.hpp>
+#include <badline/transformMatrix.hpp>
+#include <badline/vulkanBackend.hpp>
+#include <badline/window.hpp>
+#include <functional>
 #include <filesystem>
 #include <iostream>
 #include <vector>
 #include <string>
+#include <chrono>
 
 int main(int const argc, char const *const *const argv) {
   try {
+    demo::raiiGLFW glfwGuard{};
     demo::App a{.argc = std::size_t(argc), .argv = argv};
 
-    if (!demo::initialize(&a)) {
-      std::cerr << "Failed to initialize demo" << std::endl;
-      return 1;
-    }
+    if (demo::initialize(&a))
+      if (demo::run(&a))
+        return 0;
 
-    if (demo::run(&a))
-      return 0;
+    re::printErrors(a.engine.get());
+    return 1;
 
   } catch (std::exception const &e) {
     std::cerr << "Error: Caught exception: " << e.what() << std::endl;
@@ -54,7 +63,17 @@ void printErrorMessage(ap::ArgParser const *const parser) {
 }
 
 bool createScene(App *const a) {
-  std::vector<re::Vertex> vertices = {
+  re::Vertices *vertices{};
+  if (!re::createVertices(a->engine.get(), &vertices)) {
+    std::cerr << "createScene: Failed to create vertices" << std::endl;
+    return false;
+  }
+
+  struct VertData {
+    glm::vec3 pos{};
+    glm::vec4 col{};
+  };
+  std::vector<VertData> vertData = {
       {{-1.000000, 1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
       {{-1.000000, -1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
       {{1.000000, -1.000000, 1.500000}, {1.f, 0.f, 0.f, 1.f}},
@@ -65,7 +84,19 @@ bool createScene(App *const a) {
       {{1.000000, 1.000000, -0.500000}, {1.f, 0.f, 0.f, 1.f}},
   };
 
-  std::vector<uint32_t> indices = {
+  for (auto &v : vertData) {
+    re::Vertex *vert{};
+    re::addVertex(vertices, &vert);
+    re::setPosition(vert, &v.pos);
+    re::setColor(vert, &v.col);
+  }
+
+  if (!re::uploadVertices(a->engine.get())) {
+    std::cerr << "createScene: Failed to upload vertices. " << std::endl;
+    return false;
+  }
+
+  std::vector<uint32_t> indexSeq = {
       0, 1, 2, 2, 3, 0, // Front face
       4, 5, 6, 6, 7, 4, // Back face
       0, 3, 7, 7, 4, 0, // Left face
@@ -74,32 +105,74 @@ bool createScene(App *const a) {
       0, 1, 5, 5, 4, 0  // Bottom face
   };
 
-  if (auto r = re::setVertices(a->engine.get(), &vertices);
-      r != re::Result::Success) {
-    std::cerr << "Failed to set vertices. " << std::endl;
+  re::Indices *indices{};
+  if (!re::createIndices(a->engine.get(), &indices)) {
+    std::cerr << "createScene: Failed to create indices. " << std::endl;
     return false;
   }
 
-  if (auto r = re::setIndices(a->engine.get(), &indices);
-      r != re::Result::Success) {
-    std::cerr << "Failed to set indices. " << std::endl;
+  for (auto index : indexSeq)
+    re::addIndex(indices, index);
+
+  if (!re::uploadIndices(a->engine.get())) {
+    std::cerr << "createScene: Failed to upload indices. " << std::endl;
     return false;
   }
 
-  auto &instances = a->instances;
-  std::size_t instCnt = 3;
-  instances.resize(instCnt);
+  re::Instances *instances{};
+  if (!re::createInstances(a->engine.get(), &instances)) {
+    std::cerr << "createScene: Failed to create instances. " << std::endl;
+    return false;
+  }
 
-  for (std::size_t i = 0; i < instances.size(); ++i) {
-    instances[i] =
-        glm::translate(glm::mat4(1), glm::vec3(-5.f + i * 5.f, -1.f, 0.f));
+  a->instanceTransforms.resize(3);
+
+  for (std::size_t i = 0; i < a->instanceTransforms.size(); ++i) {
+    auto m = glm::translate(glm::mat4(1), glm::vec3(-5.f + i * 5.f, -1.f, 0.f));
+    a->instanceTransforms[i] = m;
+
+    re::InstanceTransform *tr{};
+    if (!re::addInstance(instances, &tr)) {
+      std::cerr << "createScene: Failed to add instance" << std::endl;
+      return false;
+    }
+
+    if (!re::setTransform(tr, &m)) {
+      std::cerr << "createScene: Failed to set transform" << std::endl;
+      return false;
+    }
+  }
+
+  if (!re::uploadInstances(a->engine.get())) {
+    std::cerr << "createScene: Failed to upload instances. " << std::endl;
+    return false;
   }
 
   a->view = glm::translate(glm::mat4(1), glm::vec3(0, 0, -15));
+  re::TransformMatrix *viewTr, *projTr{};
 
-  if (auto r = re::setInstances(a->engine.get(), &instances, instances.size());
-      r != re::Result::Success) {
-    std::cerr << "Failed to set instances. " << std::endl;
+  if (!re::createProjection(a->engine.get(), &projTr)) {
+    std::cerr << "createScene: Failed to create projection. " << std::endl;
+    return false;
+  }
+
+  auto const aspect = float(a->windowWidth) / float(a->windowHeight);
+  a->proj = glm::perspective(glm::radians(45.f), aspect, 0.1f, 100.f);
+
+  re::setMatrix(projTr, &a->proj);
+  if (!re::setProjection(a->engine.get(), projTr)) {
+    std::cerr << "createScene: Failed to set projection. " << std::endl;
+    return false;
+  }
+
+  if (!re::createView(a->engine.get(), &viewTr)) {
+    std::cerr << "createScene: Failed to create view. " << std::endl;
+    return false;
+  }
+
+  re::setMatrix(viewTr, &a->view);
+  if (!re::setView(a->engine.get(), viewTr)) {
+    std::cerr << "createScene: Failed to set view. " << std::endl;
     return false;
   }
 
@@ -107,55 +180,79 @@ bool createScene(App *const a) {
 }
 
 bool update(App *const a) {
-  auto &instances = a->instances;
-  auto &proj = a->proj;
-  auto &view = a->view;
-
   static const glm::mat4 rotX =
       glm::rotate(glm::mat4(1), 0.05f, glm::vec3(1, 0, 0));
-  static const glm::mat4 rotY =
-      glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0, 1, 0));
+  // static const glm::mat4 rotY = glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0,
+  // 1, 0));
   static const glm::mat4 rotZ =
       glm::rotate(glm::mat4(1), 0.05f, glm::vec3(0, 0, 1));
 
-  for (std::size_t i = 0; i < instances.size(); ++i) {
+  for (std::size_t i = 0; i < a->instanceTransforms.size(); ++i) {
     switch (i % 3) {
     case 0:
-      instances[i] = instances[i] * rotX;
+      a->instanceTransforms[i] = a->instanceTransforms[i] * rotX;
       break;
     case 1:
       // instances[i] = instances[i] * rotY;
       break;
     case 2:
-      instances[i] = instances[i] * rotZ;
+      a->instanceTransforms[i] = a->instanceTransforms[i] * rotZ;
       break;
     }
   }
 
-  if (auto r = re::setInstances(a->engine.get(), &instances);
-      r != re::Result::Success) {
-    std::cerr << "Failed to set instances. " << std::endl;
+  re::Instances *instances{};
+  if (!re::createInstances(a->engine.get(), &instances)) {
+    std::cerr << "update: Failed to create instances. " << std::endl;
     return false;
   }
 
-  auto const aspect = float(a->windowWidth) / float(a->windowHeight);
-  proj = glm::perspective(glm::radians(45.f), aspect, 0.1f, 100.f);
-  view = view * rotY;
-  re::setProjection(a->engine.get(), proj);
-  re::setView(a->engine.get(), view);
+  for (std::size_t i = 0; i < a->instanceTransforms.size(); ++i) {
+    auto m = glm::translate(glm::mat4(1), glm::vec3(float(i) / 50.f, 0.f, 0.f));
+    m = m * a->instanceTransforms[i];
+
+    re::InstanceTransform *tr{};
+    if (!re::addInstance(instances, &tr)) {
+      std::cerr << "update: Failed to add instance" << std::endl;
+      return false;
+    }
+
+    if (!re::setTransform(tr, &m)) {
+      std::cerr << "update: Failed to set transform" << std::endl;
+      return false;
+    }
+  }
+
+  if (!re::uploadInstances(a->engine.get())) {
+    std::cerr << "update: Failed to upload instances. " << std::endl;
+    return false;
+  }
+
+  re::TransformMatrix *viewTr{};
+  // a->view = a->view * rotY;
+  if (!re::createView(a->engine.get(), &viewTr)) {
+    std::cerr << "createScene: Failed to create view. " << std::endl;
+    return false;
+  }
+
+  re::setMatrix(viewTr, &a->view);
+  if (!re::setView(a->engine.get(), viewTr)) {
+    std::cerr << "createScene: Failed to set view. " << std::endl;
+    return false;
+  }
 
   return true;
 }
 
 bool run(App *const a) {
   if (!createScene(a)) {
-    std::cerr << "Creating scene failed" << std::endl;
+    std::cerr << "run: Creating scene failed" << std::endl;
     return false;
   }
 
   auto const engine = a->engine.get();
   bool windowOpen = true;
-  re::isWindowOpen(engine, &windowOpen);
+  re::isOpen(a->win, &windowOpen);
 
   constexpr auto frameMinTime = std::chrono::milliseconds(17);
   auto timeStamp = std::chrono::steady_clock::now();
@@ -166,13 +263,12 @@ bool run(App *const a) {
     if (auto now = std::chrono::steady_clock::now();
         now - timeStamp >= frameMinTime) {
       if (!update(a)) {
-        std::cerr << "Update failed" << std::endl;
+        std::cerr << "run: Update failed" << std::endl;
         return false;
       }
 
-      auto r = re::render(engine);
-      if (r != re::Result::Success) {
-        std::cerr << "Rendering failed" << std::endl;
+      if (!re::render(engine)) {
+        std::cerr << "run: Rendering failed" << std::endl;
         return false;
       }
 
@@ -180,14 +276,21 @@ bool run(App *const a) {
     }
 
     bool keyPressed = false;
-    re::isKeyPressed(engine, GLFW_KEY_ESCAPE, &keyPressed);
+    re::isKeyPressed(a->win, GLFW_KEY_ESCAPE, &keyPressed);
     if (keyPressed)
-      re::closeWindow(engine);
+      re::close(a->win);
 
-    re::isWindowOpen(engine, &windowOpen);
+    re::isOpen(a->win, &windowOpen);
   }
 
   return true;
+}
+
+std::unique_ptr<re::RenderEngine, std::function<void(re::RenderEngine *const)>>
+createSmartRenderEngine() {
+  re::RenderEngine *handle{};
+  re::create(&handle);
+  return {handle, re::destroy};
 }
 
 bool initialize(App *const a) {
@@ -197,14 +300,24 @@ bool initialize(App *const a) {
   if (a->argc > 1 && !initializeArgParser(a))
     return false;
 
-  a->engine = re::createRenderEngine("Demo", true);
+  a->engine = createSmartRenderEngine();
   if (!a->engine) {
-    std::cerr << "Failed to create render engine" << std::endl;
+    std::cerr << "initialize: Failed to create render engine" << std::endl;
     return false;
   }
 
-  if (!openWindow(a)) {
-    std::cerr << "Failed to open window" << std::endl;
+  re::VulkanBackend *vk{};
+  if (!re::createBackend(a->engine.get(), &vk)) {
+    std::cerr << "initialize: Failed to create render backend" << std::endl;
+    return false;
+  }
+
+  re::setApplicationName(vk, "Demo");
+  re::setValidationLayersOn(vk);
+  re::initialize(a->engine.get());
+
+  if (!openWindow(a, vk)) {
+    std::cerr << "initialize: Failed to open window" << std::endl;
     return false;
   }
 
@@ -213,8 +326,8 @@ bool initialize(App *const a) {
 
 SmartArgParser createSmartArgParser() {
   ap::ArgParser *parser{};
-  ap::createArgParser(&parser);
-  return SmartArgParser{parser, ap::destroyArgParser};
+  ap::create(&parser);
+  return SmartArgParser{parser, ap::destroy};
 }
 
 bool initializeArgParser(App *const a) {
@@ -308,7 +421,7 @@ bool extractWindowArgs(App *const a, uint32_t *const w, uint32_t *const h) {
   return convertWindowArgs(&vals, w, h);
 }
 
-bool openWindow(App *const a) {
+bool openWindow(App *const a, re::VulkanBackend *const vk) {
   uint32_t width{640}, height{480};
 
   if (a->argc > 1 && !extractWindowArgs(a, &width, &height)) {
@@ -316,14 +429,23 @@ bool openWindow(App *const a) {
     return false;
   }
 
-  auto result = re::createWindow(a->engine.get(), width, height);
-  if (result != re::Result::Success) {
-    std::string err{};
-    re::toString(result, &err);
-    std::cerr << "Window creation failure: " << err << std::endl;
+  re::Window *win{};
+  if (!re::createWindow(a->engine.get(), &win)) {
+    std::cerr << "openWindow: Window creation failure: " << std::endl;
     return false;
   }
 
+  if (!re::setResolution(win, width, height)) {
+    std::cerr << "openWindow: Failed to set resolution: " << std::endl;
+    return false;
+  }
+
+  if (!re::open(win, vk)) {
+    std::cerr << "openWindow: Failed to open window: " << std::endl;
+    return false;
+  }
+
+  a->win = win;
   a->windowWidth = width;
   a->windowHeight = height;
   return true;

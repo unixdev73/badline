@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -18,15 +18,20 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include "vkresult.hpp"
-
 namespace re {
-Result toString(VkResult const result, std::string *const output) {
-  std::string asStr = string_VkResult(result);
-  if (asStr == "Unhandled VkResult")
-    return Result::ErrorVulkanResultMappingFailure;
+struct InstanceTransform;
+struct Instances;
 
-  *output = std::move(asStr);
-  return Result::Success;
-}
+bool reserve(Instances *const handle, unsigned long const size);
+
+bool clear(Instances *const handle);
+
+bool addInstance(Instances *const handle, InstanceTransform **const p);
+
+bool getData(Instances const *const handle,
+             void const **const data,
+             unsigned long *const size);
+
+bool getInstanceCount(Instances const *const handle,
+                      unsigned long *const count);
 } // namespace re

@@ -2,23 +2,19 @@ find_package(Vulkan 1.3 COMPONENTS glslangValidator REQUIRED)
 find_library(GLFW glfw NAMES glfw3 REQUIRED)
 find_package(glm REQUIRED)
 
-add_library(vulkanMemoryAllocator allocator.cpp)
-target_compile_options(vulkanMemoryAllocator PRIVATE -w)
+add_library(vulkanAllocator vulkanAllocator.cpp)
+target_compile_options(vulkanAllocator PRIVATE -w)
 
 add_library(renderEngine
-	interface.cpp
-	vkresult.cpp
-	instance.cpp
-	engine.cpp
-	device.cpp
-	shader.cpp
-	window.cpp
+	vulkanBackend.cpp
+	renderEngine.cpp
+	error.cpp
 )
 setCompileOptions(renderEngine)
 
 set(renderEngineLibList
-	vulkanMemoryAllocator
 	${Vulkan_LIBRARIES}
+	vulkanAllocator
 	${GLFW}
 )
 

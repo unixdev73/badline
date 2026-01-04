@@ -20,14 +20,10 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <badline/renderEngine.hpp>
-#include <vulkan/vulkan.h>
-#include <string>
+#include <functional>
+#include <memory>
 
 namespace re {
-struct RenderEngineT;
-
-Result createShaderModule(RenderEngineT *const engine,
-                          std::string const &spirvFile,
-                          UniqueResource<VkShaderModule_T> *const out);
-} // namespace re
+template <typename T>
+using UniqueRes = std::unique_ptr<T, std::function<void(T *const)>>;
+}

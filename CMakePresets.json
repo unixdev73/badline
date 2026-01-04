@@ -12,7 +12,7 @@
       "displayName": "Development",
       "description": "Development build including tests",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build",
+      "binaryDir": "../build",
 
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",

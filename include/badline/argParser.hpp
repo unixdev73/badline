@@ -18,8 +18,6 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#pragma once
-
 namespace ap {
 struct ArgParser;
 
@@ -27,11 +25,11 @@ struct ArgParser;
  * If creation fails *handle = nullptr.
  * If handle = nullptr, the procedure returns.
  */
-void createArgParser(ArgParser **const handle);
+void create(ArgParser **const handle);
 
 /* Deletes an instance of ArgParser.
  */
-void destroyArgParser(ArgParser const *const handle);
+void destroy(ArgParser *const handle);
 
 /* Every function that returns bool will leave an error message
  * if it returns false.

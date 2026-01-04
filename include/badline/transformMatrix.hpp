@@ -20,46 +20,11 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <badline/renderEngine.hpp>
-#include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>
-#include "allocator.hpp"
-#include <functional>
-#include <vector>
+#include <glm/glm.hpp>
 
 namespace re {
-struct QueueInfo {
-  uint32_t famIndex{};
-  uint32_t count{};
-};
+struct TransformMatrix;
 
-struct DeviceInfoT {
-  std::vector<VkQueueFamilyProperties> queues{};
-  std::vector<VkExtensionProperties> exts{};
-  VkPhysicalDeviceFeatures feats{};
-  VkPhysicalDeviceProperties props{};
-  QueueInfo graphicsQueue{};
-  QueueInfo presentQueue{};
-};
-
-struct AllocatorT;
-
-struct DeviceT {
-  VkPhysicalDevice identifier{VK_NULL_HANDLE};
-  UniqueResource<VkDevice_T> handle{nullptr, nullptr};
-
-  VkQueue present{VK_NULL_HANDLE};
-  uint32_t presentFamIndex{};
-  VkQueue graphics{VK_NULL_HANDLE};
-  uint32_t graphicsFamIndex{};
-
-  UniqueResource<VkCommandPool_T> graphicsCmdPool{nullptr, nullptr};
-  std::unique_ptr<AllocatorT> allocator{};
-  std::vector<UniqueResource<VkPipelineLayout_T>> pipelineLayouts{};
-  std::vector<UniqueResource<VkPipeline_T>> pipelines{};
-};
-
-Result createOptimalGPU(RenderEngineT *const engine);
-
-DeviceInfoT queryDeviceInfo(VkPhysicalDevice_T *const handle);
+bool setMatrix(TransformMatrix *const handle, glm::mat4 const *const p);
+bool getMatrix(TransformMatrix const *const handle, glm::mat4 *const p);
 } // namespace re

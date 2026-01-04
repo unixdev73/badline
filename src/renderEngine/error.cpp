@@ -18,14 +18,35 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <glm/glm.hpp>
+#include "error.hpp"
 
 namespace re {
-struct Vertex;
+void addErrMsg(ErrorLogs const *const e, std::string const &msg, VkResult r) {
+  if (!e)
+    return;
 
-bool setPosition(Vertex *const handle, glm::vec3 *const p);
-bool setColor(Vertex *const handle, glm::vec4 *const p);
+  if (msg.empty())
+    return;
 
-bool getPosition(Vertex const *const handle, glm::vec3 *const p);
-bool getColor(Vertex const *const handle, glm::vec4 *const p);
+  std::string message{msg}, code{};
+
+  if (r != VK_SUCCESS) {
+    if (toString(r, &code))
+      message += ", VkError code: " + std::to_string(r);
+    else
+      message += ", VkError code: " + code;
+  }
+
+  e->errors.push_back(std::move(message));
+  e->errptr.push_back(e->errors.back().c_str());
+}
+
+bool toString(VkResult const result, std::string *const output) {
+  std::string asStr = string_VkResult(result);
+  if (asStr == "Unhandled VkResult")
+    return false;
+
+  *output = std::move(asStr);
+  return true;
+}
 } // namespace re

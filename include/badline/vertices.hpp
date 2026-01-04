@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -18,12 +18,17 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#pragma once
-
-#include <badline/renderEngine.hpp>
-#include <vulkan/vk_enum_string_helper.h>
-#include <string>
-
 namespace re {
-Result toString(VkResult const result, std::string *const output);
+struct Vertex;
+struct Vertices;
+
+bool reserve(Vertices *const handle, unsigned long const size);
+
+bool addVertex(Vertices *const handle, Vertex **const p);
+
+bool clear(Vertices *const handle);
+
+bool getData(Vertices const *const handle,
+             void const **const data,
+             unsigned long *const size);
 } // namespace re

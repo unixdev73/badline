@@ -18,103 +18,55 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#pragma once
-
-#include <badline/vertex.hpp>
-#include <functional>
-#include <memory>
-#include <vector>
-
 namespace re {
-enum class Result : int {
-  Success,
-  ErrorNullptrHandle,
-  ErrorNullptrWindow,
-  ErrorNullptrMessage,
-  ErrorNullptrOutput,
-  ErrorFailedToInitGLFW,
-  ErrorMemoryAllocationFailure,
-  ErrorVulkanInstanceCreationFailure,
-  ErrorNoVulkanDevicesAvailable,
-  ErrorVulkanDeviceCreationFailure,
-  ErrorGLFWindowCreationFailure,
-  ErrorVulkanSurfaceCreationFailure,
-  ErrorPresentModesQueryFailure,
-  ErrorPresentModesFillFailure,
-  ErrorRequestedPresentModeNotAvailable,
-  ErrorSurfaceCapabilitiesQueryFailure,
-  ErrorRequestedSurfaceWidthTooLarge,
-  ErrorRequestedSurfaceHeightTooLarge,
-  ErrorColorAttachmentBitNotSupported,
-  ErrorSurfaceFormatQueryFailure,
-  ErrorSurfaceFormatFillFailure,
-  ErrorNoSurfaceFormatsAvailable,
-  ErrorVulkanSwapchainCreationFailure,
-  ErrorSwapchainImageQueryFailure,
-  ErrorSwapchainImageFillFailure,
-  ErrorVulkanCommandPoolCreationFailure,
-  ErrorVulkanResultMappingFailure,
-  ErrorVulkanCommandBufferAllocationFailure,
-  ErrorVulkanMemoryAllocatorCreationFailure,
-  ErrorVulkanSemaphoreCreationFailure,
-  ErrorVulkanImageViewCreationFailure,
-  ErrorSwapchainImageAcquisitionFailure,
-  ErrorVulkanFenceCreationFailure,
-  ErrorVulkanShaderModuleCreationFailure,
-  ErrorVulkanPipelineLayoutCreationFailure,
-  ErrorVulkanPipelineCreationFailure,
-  ErrorVulkanBufferCreationFailure,
-  ErrorDepthImageCreationFailure,
-  ErrorCopyToStagingBufferFailure,
-  ErrorUnsupportedBufferPurpose,
-  ErrorVulkanDescriptorPoolCreationFailure,
-  ErrorVulkanDescriptorSetLayoutCreationFailure,
-  ErrorVulkanDescriptorSetAllocationFailure,
-  ErrorNoErrorMessage
-};
+struct VulkanBackend;
+struct TransformMatrix;
+struct Vertices;
+struct Indices;
+struct Instances;
+struct RenderEngine;
+struct Window;
 
-Result toString(Result const result, std::string *const output);
-} // namespace re
+/* Note: Only the render engine has to be destroyed manually.
+ * Everything created by the engine will be automatically taken care of :)
+ * (Recommendation: wrap engine pointer into unique pointer with destroy
+ * function as custom deleter).
+ */
+void create(RenderEngine **const handle);
 
-namespace re {
-template <typename T>
-using UniqueResource = std::unique_ptr<T, std::function<void(T *const)>>;
+void destroy(RenderEngine *const handle);
 
-static constexpr auto BADLINE_VK_API_VERSION = VK_API_VERSION_1_3;
+/* For example, the VulkanBackend will be destroyed automatically
+ * by the engine. Use this handle to configure Vulkan related details
+ * prior to initialization which does the actual heavy lifting.
+ */
+bool createBackend(RenderEngine *const handle, VulkanBackend **const p);
 
-struct RenderEngineT;
+bool initialize(RenderEngine *const handle);
 
-using UniqueRenderEngine = UniqueResource<RenderEngineT>;
+bool createWindow(RenderEngine *const handle, Window **const p);
 
-Result createRenderEngine(RenderEngineT **const handle,
-                          std::string const &appName,
-                          bool debug);
+bool createProjection(RenderEngine *const handle, TransformMatrix **const p);
 
-void destroyRenderEngine(RenderEngineT const *const handle);
+bool setProjection(RenderEngine *const handle, TransformMatrix const *const p);
 
-UniqueRenderEngine createRenderEngine(std::string const &appName, bool debug);
+bool createView(RenderEngine *const handle, TransformMatrix **const p);
 
-Result createWindow(RenderEngineT *const handle,
-                    uint32_t const width,
-                    uint32_t const height);
+bool setView(RenderEngine *const handle, TransformMatrix const *const p);
 
-Result setProjection(RenderEngineT *const handle, glm::mat4 const projection);
-Result setView(RenderEngineT *const handle, glm::mat4 const view);
+bool createVertices(RenderEngine *const handle, Vertices **const p);
 
-Result setVertices(RenderEngineT *const handle,
-                   std::vector<Vertex> const *const vertices);
-Result setIndices(RenderEngineT *const handle,
-                  std::vector<uint32_t> const *const indices);
-Result setInstances(RenderEngineT *const handle,
-                    std::vector<glm::mat4> const *const instances,
-                    std::size_t const allocElem = 0);
+bool uploadVertices(RenderEngine *const handle);
 
-Result isWindowOpen(RenderEngineT *const handle, bool *const output);
-Result closeWindow(RenderEngineT *const handle);
-Result isKeyPressed(RenderEngineT *const handle, int key, bool *const output);
+bool createIndices(RenderEngine *const handle, Indices **const p);
 
-Result render(RenderEngineT *const handle);
+bool uploadIndices(RenderEngine *const handle);
 
-Result getErrorMessage(RenderEngineT const *const handle,
-                       std::string *const message);
+bool createInstances(RenderEngine *const handle, Instances **const p);
+
+bool uploadInstances(RenderEngine *const handle);
+
+bool render(RenderEngine *const handle);
+
+void printErrors(RenderEngine const *const handle);
 } // namespace re

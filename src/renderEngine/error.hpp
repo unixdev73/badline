@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -20,24 +20,19 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <badline/renderEngine.hpp>
-#include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>
-#include <string>
+#include <vulkan/vk_enum_string_helper.h>
 #include <vector>
+#include <string>
 
 namespace re {
-struct InstanceT {
-  UniqueResource<VkInstance_T> handle{nullptr, nullptr};
-  std::string title{};
-  std::vector<std::string> missingReqExts{};
-  std::vector<std::string> requestedExts{};
+struct ErrorLogs {
+  mutable std::vector<std::string> errors{};
+  mutable std::vector<char const *> errptr{};
 };
 
-Result createVulkanInstance(RenderEngineT *const engine,
-                            std::string const &appName,
-                            bool validate);
+bool toString(VkResult const result, std::string *const output);
 
-Result storeMissingInstanceExts(std::vector<std::string> const *const requested,
-                                std::vector<std::string> *const missing);
+void addErrMsg(ErrorLogs const *const e,
+               std::string const &msg,
+               VkResult r = VK_SUCCESS);
 } // namespace re

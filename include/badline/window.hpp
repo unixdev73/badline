@@ -18,43 +18,29 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#pragma once
-
-#include <badline/renderEngine.hpp>
-#include <vulkan/vulkan.h>
-#include <GLFW/glfw3.h>
-
 namespace re {
-struct WindowT {
-  UniqueResource<GLFWwindow> handle{};
-  uint32_t width{}, height{};
+struct VulkanBackend;
+struct Window;
 
-  UniqueResource<VkSurfaceKHR_T> surface{};
-  std::vector<VkSurfaceFormatKHR> surfaceFormats{};
-  VkSurfaceFormatKHR surfaceFormat{};
-  VkSurfaceCapabilitiesKHR surfaceCaps{};
+bool setResolution(Window *const handle, unsigned const w, unsigned const h);
 
-  VkPresentModeKHR presentMode{VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR};
-  std::vector<VkPresentModeKHR> presentModes{};
+bool setTitle(Window *const handle, char const *const p);
 
-  UniqueResource<VkSwapchainKHR_T> swapchain{};
-  std::vector<VkImage> swapImages{};
-  std::vector<UniqueResource<VkImageView_T>> swapImgViews{};
+bool open(Window *const handle, VulkanBackend *const p);
 
-  UniqueResource<VkImage_T> depthImg{};
-  UniqueResource<VkImageView_T> depthImgView{};
+bool resize(Window *const handle);
 
-  UniqueResource<VkSemaphore_T> acquireSem{};
-  std::vector<UniqueResource<VkSemaphore_T>> renderSem{};
-  VkCommandBuffer graphicsBuf{VK_NULL_HANDLE};
+bool getWidth(Window const *const handle);
 
-  UniqueResource<VkFence_T> fence{};
+bool getHeight(Window const *const handle);
 
-  std::size_t activePipelineLayout{};
-  std::size_t activePipeline{};
-};
+bool getTitle(Window const *const handle);
 
-Result
-createWindow(RenderEngineT *const engine, uint32_t width, uint32_t height);
+bool isOpen(Window const *const handle, bool *const open);
 
+bool isKeyPressed(Window const *const handle,
+                  int const key,
+                  bool *const isPressed);
+
+bool close(Window const *const handle);
 } // namespace re

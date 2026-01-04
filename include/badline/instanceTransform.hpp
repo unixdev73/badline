@@ -1,4 +1,4 @@
-/* Copyright (c) 2025 unixdev73@gmail.com
+/* Copyright (c) 2026 unixdev73@gmail.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"),
@@ -18,22 +18,18 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#pragma once
-
-#include <vulkan/vulkan.h>
-#include <memory>
-
-struct VmaAllocator_T;
-typedef struct VmaAllocator_T *VmaAllocator;
+#include <glm/glm.hpp>
 
 namespace re {
-struct AllocatorT {
-  VmaAllocator handle{};
-  ~AllocatorT();
-};
+struct InstanceTransform;
 
-std::unique_ptr<AllocatorT> createAllocator(VkInstance const inst,
-                                            VkPhysicalDevice const phy,
-                                            VkDevice const dev,
-                                            VkResult *const res);
+bool setTransform(InstanceTransform *const handle, glm::mat4 *const p);
+bool setColor(InstanceTransform *const handle, glm::vec4 *const p);
+
+bool getTransform(InstanceTransform const *const handle, glm::mat4 *const p);
+bool getColor(InstanceTransform const *const handle, glm::vec4 *const p);
+
+void getErrorMessages(InstanceTransform const *const handle,
+                      char const *const *const messages,
+                      unsigned *const size);
 } // namespace re
