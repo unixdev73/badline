@@ -30,6 +30,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <iostream>
 #include <memory>
 #include <chrono>
+#include <array>
 
 namespace demo {
 template <typename T>
@@ -60,6 +61,9 @@ struct AppData {
   re::Object *cube{};
   re::Texture *vikingTex{};
   re::Object *vikingObj{};
+
+  std::array<unsigned short, 100> frameTimes{};
+  std::size_t frameIdx{};
 };
 
 bool initialize(AppData *const);
@@ -110,27 +114,32 @@ bool run(AppData *const a) {
 
   if (!createCube(a))
     return false;
-	float const cubeSc = 0.5f;
-	a->cubeModel = glm::scale(glm::mat4{1.f}, glm::vec3{cubeSc, cubeSc, cubeSc});
+  float const cubeSc = 0.5f;
+  a->cubeModel = glm::scale(glm::mat4{1.f}, glm::vec3{cubeSc, cubeSc, cubeSc});
   a->cubeModel = glm::translate(a->cubeModel, glm::vec3{0, 0, 2.5f});
 
-	float const vkSc = 2.f;
-	a->vikingModel = glm::scale(a->vikingModel, glm::vec3{vkSc, vkSc, vkSc});
-	a->vikingModel = glm::translate(a->vikingModel, glm::vec3{0,0,-0.5f});
+  float const vkSc = 2.f;
+  a->vikingModel = glm::scale(a->vikingModel, glm::vec3{vkSc, vkSc, vkSc});
+  a->vikingModel = glm::translate(a->vikingModel, glm::vec3{0, 0, -0.5f});
 
+  auto const minTime = std::chrono::milliseconds(17); // ~60 FPS
   auto beginFrame = std::chrono::steady_clock::now();
   while (!glfwWindowShouldClose(a->glfwWin)) {
     glfwPollEvents();
     bool quit = false;
 
-    if (std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - beginFrame) >=
-        std::chrono::milliseconds(17)) {
+    namespace ch = std::chrono;
+    auto const diff = ch::duration_cast<ch::milliseconds>(
+        ch::steady_clock::now() - beginFrame);
 
+    a->frameTimes[a->frameIdx] = diff.count();
+    a->frameIdx = (++a->frameIdx) % a->frameTimes.size();
+
+    if (diff >= minTime) {
       if (!handleInput(a, &quit))
         return false;
       if (quit)
-        return true;
+        break;
 
       if (!re::stage(a->backend, a->vikingObj, a->vikingModel)) {
         re::printLogs(a->engine);
@@ -151,6 +160,12 @@ bool run(AppData *const a) {
     }
   }
 
+  float sum = 0.f;
+  for (auto const &e : a->frameTimes)
+    sum += static_cast<float>(e);
+  auto const avgFrameTime = sum / a->frameTimes.size();
+  std::cout << "AVG: " << avgFrameTime << " MS/F = ";
+  std::cout << (1.0 / avgFrameTime) * 1000.0 << " FPS" << std::endl;
   return true;
 }
 
