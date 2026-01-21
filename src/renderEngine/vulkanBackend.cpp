@@ -40,6 +40,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <glm/gtx/hash.hpp>
 #include <glm/glm.hpp>
 
+#include <filesystem>
 #include <fstream>
 #include <cstddef>
 #include <string>
@@ -523,7 +524,7 @@ bool render(VulkanBackend *const backend, VulkanWindow *const window) {
     return false;
   }
 
-  window->frameIndex = ++window->frameIndex % window->frames.size();
+  window->frameIndex = (window->frameIndex + 1) % window->frames.size();
   backend->objectsToRender.clear();
   return true;
 }
