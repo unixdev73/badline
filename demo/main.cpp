@@ -133,7 +133,7 @@ bool run(AppData *const a) {
         ch::steady_clock::now() - beginFrame);
 
     a->frameTimes[a->frameIdx] = diff.count();
-    a->frameIdx = (++a->frameIdx) % a->frameTimes.size();
+    a->frameIdx = (a->frameIdx + 1) % a->frameTimes.size();
 
     if (diff >= minTime) {
       if (!handleInput(a, &quit))
