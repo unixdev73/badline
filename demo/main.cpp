@@ -124,8 +124,8 @@ bool run(AppData *const a) {
   a->vikingModel = glm::scale(a->vikingModel, glm::vec3{vkSc, vkSc, vkSc});
   a->vikingModel = glm::translate(a->vikingModel, glm::vec3{0, 0, -0.5f});
 
-  glfwSetWindowPos(a->glfwWin2, 640, 500);
-  glfwSetWindowPos(a->glfwWin, 0, 500);
+  glfwSetWindowPos(a->glfwWin2, 640, 0);
+  glfwSetWindowPos(a->glfwWin, 0, 0);
 
   auto const minTime = std::chrono::milliseconds(17); // ~60 FPS
   auto beginFrame = std::chrono::steady_clock::now();

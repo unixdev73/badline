@@ -36,10 +36,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #define STBI_NO_SIMD
 #include "stb_image.h"
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/hash.hpp>
 #include <glm/glm.hpp>
-
 #include <filesystem>
 #include <fstream>
 #include <cstddef>
@@ -122,18 +119,13 @@ struct Texture {
 };
 
 struct VertexData {
-  glm::vec3 position;
-  float posPadding;
-  glm::vec2 texture;
-  glm::vec2 texPadding;
-  glm::vec3 normal;
-  float normPadding;
-  glm::vec4 color;
+  glm::vec4 quad0; // posX, posY, posZ, texX
+  glm::vec4 quad1; // texY, norX, norY, norZ
+  glm::vec4 quad2; // colR, colG, colB, colA
 };
 
-bool operator==(re::VertexData const &a, re::VertexData const &b) {
-  return a.position == b.position && a.texture == b.texture &&
-         a.normal == b.normal && a.color == b.color;
+inline bool operator==(re::VertexData const &a, re::VertexData const &b) {
+  return a.quad0 == b.quad0 && a.quad1 == b.quad1 && a.quad2 == b.quad2;
 }
 
 struct Object {
@@ -213,10 +205,15 @@ bool addVertex(Object *const handle,
 
   handle->vertices.push_back(VertexData{});
   auto &data = handle->vertices.back();
-  data.position = position;
-  data.texture = texCoord;
-  data.normal = normal;
-  data.color = color;
+  data.quad0.x = position.x;
+  data.quad0.y = position.y;
+  data.quad0.z = position.z;
+  data.quad0.w = texCoord.x;
+  data.quad1.x = texCoord.y;
+  data.quad1.y = normal.x;
+  data.quad1.z = normal.y;
+  data.quad1.w = normal.z;
+  data.quad2 = color;
   return true;
 }
 
@@ -591,10 +588,9 @@ void getPosition(tinyobj::attrib_t const *const attrib,
   if (!attrib || !idx || !vertex)
     return;
 
-  vertex->position =
-      glm::vec3(attrib->vertices[3 * size_t(idx->vertex_index) + 0],
-                attrib->vertices[3 * size_t(idx->vertex_index) + 1],
-                attrib->vertices[3 * size_t(idx->vertex_index) + 2]);
+  vertex->quad0.x = attrib->vertices[3 * size_t(idx->vertex_index) + 0];
+  vertex->quad0.y = attrib->vertices[3 * size_t(idx->vertex_index) + 1];
+  vertex->quad0.z = attrib->vertices[3 * size_t(idx->vertex_index) + 2];
 }
 
 void getNormal(tinyobj::attrib_t const *const attrib,
@@ -604,14 +600,15 @@ void getNormal(tinyobj::attrib_t const *const attrib,
     return;
 
   if (idx->normal_index < 0) {
-    vertex->normal = glm::vec3(0.f, 0.f, 1.f);
+    vertex->quad1.y = 0.f;
+    vertex->quad1.z = 0.f;
+    vertex->quad1.w = 1.f;
     return;
   }
 
-  vertex->normal =
-      glm::vec3(attrib->normals[3 * size_t(idx->normal_index) + 0],
-                attrib->normals[3 * size_t(idx->normal_index) + 1],
-                attrib->normals[3 * size_t(idx->normal_index) + 2]);
+  vertex->quad1.y = attrib->normals[3 * size_t(idx->normal_index) + 0];
+  vertex->quad1.z = attrib->normals[3 * size_t(idx->normal_index) + 1];
+  vertex->quad1.w = attrib->normals[3 * size_t(idx->normal_index) + 2];
 }
 
 void getTexture(tinyobj::attrib_t const *const attrib,
@@ -621,13 +618,13 @@ void getTexture(tinyobj::attrib_t const *const attrib,
     return;
 
   if (idx->texcoord_index < 0) {
-    vertex->texture = glm::vec2(0.f, 0.f);
+    vertex->quad0.w = 0.f;
+    vertex->quad1.x = 0.f;
     return;
   }
 
-  vertex->texture =
-      glm::vec2(attrib->texcoords[2 * size_t(idx->texcoord_index) + 0],
-                attrib->texcoords[2 * size_t(idx->texcoord_index) + 1]);
+  vertex->quad0.w = attrib->texcoords[2 * size_t(idx->texcoord_index) + 0];
+  vertex->quad1.x = attrib->texcoords[2 * size_t(idx->texcoord_index) + 1];
 }
 
 void getColor(const tinyobj::attrib_t *attrib,
@@ -639,11 +636,11 @@ void getColor(const tinyobj::attrib_t *attrib,
   size_t i = 3 * size_t(idx->vertex_index);
 
   if (idx->vertex_index < 0 || attrib->colors.size() < i + 3) {
-    vertex->color = glm::vec4(1.0f); // default white
+    vertex->quad2 = glm::vec4(1.0f); // default white
     return;
   }
 
-  vertex->color = glm::vec4(attrib->colors[i + 0],
+  vertex->quad2 = glm::vec4(attrib->colors[i + 0],
                             attrib->colors[i + 1],
                             attrib->colors[i + 2],
                             1.0f);
@@ -711,21 +708,20 @@ template <> struct hash<re::VertexData> {
       return lhs ^ (rhs + 0x9e3779b9 + (lhs << 6) + (lhs >> 2));
     };
 
-    h = combine(h, hash<float>()(v.position.x));
-    h = combine(h, hash<float>()(v.position.y));
-    h = combine(h, hash<float>()(v.position.z));
+    h = combine(h, hash<float>()(v.quad0.x));
+    h = combine(h, hash<float>()(v.quad0.y));
+    h = combine(h, hash<float>()(v.quad0.z));
+    h = combine(h, hash<float>()(v.quad0.w));
 
-    h = combine(h, hash<float>()(v.normal.x));
-    h = combine(h, hash<float>()(v.normal.y));
-    h = combine(h, hash<float>()(v.normal.z));
+    h = combine(h, hash<float>()(v.quad1.x));
+    h = combine(h, hash<float>()(v.quad1.y));
+    h = combine(h, hash<float>()(v.quad1.z));
+    h = combine(h, hash<float>()(v.quad1.w));
 
-    h = combine(h, hash<float>()(v.texture.x));
-    h = combine(h, hash<float>()(v.texture.y));
-
-    h = combine(h, hash<float>()(v.color.r));
-    h = combine(h, hash<float>()(v.color.g));
-    h = combine(h, hash<float>()(v.color.b));
-    h = combine(h, hash<float>()(v.color.a));
+    h = combine(h, hash<float>()(v.quad2.x));
+    h = combine(h, hash<float>()(v.quad2.y));
+    h = combine(h, hash<float>()(v.quad2.z));
+    h = combine(h, hash<float>()(v.quad2.w));
 
     return h;
   }
@@ -872,21 +868,16 @@ bool createGraphicsPipeline(VulkanBackend *const backend) {
   VkVertexInputAttributeDescription const attribDesc[] = {
       {.location = 0,
        .binding = 0,
-       .format = VK_FORMAT_R32G32B32_SFLOAT,
-       .offset = offsetof(VertexData, position)},
+       .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+       .offset = offsetof(VertexData, quad0)},
       {.location = 1,
        .binding = 0,
-       .format = VK_FORMAT_R32G32_SFLOAT,
-       .offset = offsetof(VertexData, texture)},
+       .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+       .offset = offsetof(VertexData, quad1)},
       {.location = 2,
        .binding = 0,
-       .format = VK_FORMAT_R32G32B32_SFLOAT,
-       .offset = offsetof(VertexData, normal)},
-      {.location = 3,
-       .binding = 0,
        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-       .offset = offsetof(VertexData, color)},
-  };
+       .offset = offsetof(VertexData, quad2)}};
   vertexInputState.pVertexAttributeDescriptions = attribDesc;
   vertexInputState.vertexAttributeDescriptionCount =
       sizeof(attribDesc) / sizeof(attribDesc[0]);
@@ -1171,11 +1162,12 @@ bool transitionImageLayout(VulkanBackend *const handle,
 }
 
 bool copyBufferToImage(VulkanBackend *const handle,
-                       VkBuffer const src,
+                       void const *src,
                        VkDeviceSize const size,
                        VkImage const dst,
                        uint32_t const width,
-                       uint32_t const height) {
+                       uint32_t const height,
+                       uint32_t const bytesPerPixel) {
   if (!handle)
     return false;
   if (!size) {
@@ -1186,7 +1178,7 @@ bool copyBufferToImage(VulkanBackend *const handle,
     return false;
   }
   if (!src) {
-    addErrMsg(handle->logs, __func__, "The staging buffer is not valid");
+    addErrMsg(handle->logs, __func__, "The data = nullptr");
     return false;
   }
 
@@ -1207,6 +1199,7 @@ bool copyBufferToImage(VulkanBackend *const handle,
   VkCommandPoolCreateInfo pinf{};
   VkCommandPool pool{};
   pinf.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  pinf.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
   if (auto r = vkCreateCommandPool(dev, &pinf, 0, &pool); r != VK_SUCCESS) {
     addErrMsg(handle->logs, __func__, "Failed to create command pool");
@@ -1248,24 +1241,62 @@ bool copyBufferToImage(VulkanBackend *const handle,
   depInfo.pImageMemoryBarriers = &imb;
   vkCmdPipelineBarrier2(cmd, &depInfo);
 
-  VkBufferImageCopy r{};
-  r.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  r.imageSubresource.layerCount = 1;
-  r.imageExtent = {width, height, 1};
-  vkCmdCopyBufferToImage(cmd,
-                         handle->device->stagingBuffer.handle.get(),
-                         dst,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                         1,
-                         &r);
-  vkEndCommandBuffer(cmd);
-
   VkSubmitInfo sinf{};
   sinf.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   sinf.commandBufferCount = 1;
   sinf.pCommandBuffers = &cmd;
+
+  vkEndCommandBuffer(cmd);
   vkQueueSubmit(handle->device->graphics, 1, &sinf, fence);
   vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+  vkResetFences(dev, 1, &fence);
+
+  auto const stagingData = handle->device->stagingBuffer.allocInfo.pMappedData;
+  auto const stagingSize = handle->device->stagingBuffer.allocInfo.size;
+  auto const stagingBuf = handle->device->stagingBuffer.handle.get();
+  VkBufferImageCopy r{};
+  r.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  r.imageSubresource.layerCount = 1;
+  r.imageOffset = VkOffset3D{.x = 0, .y = 0, .z = 0};
+
+  auto const rowSizeInBytes = width * bytesPerPixel;
+  if (rowSizeInBytes > stagingSize) {
+    addErrMsg(handle->logs,
+              __func__,
+              "The image size is too great to fit in the staging buffer with "
+              "the current algo");
+    return false;
+  }
+
+  if (stagingSize >= size) {
+    std::memcpy(stagingData, src, size);
+    r.imageExtent = {width, height, 1};
+
+    vkBeginCommandBuffer(cmd, &beginInfo);
+    vkCmdCopyBufferToImage(
+        cmd, stagingBuf, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
+    vkEndCommandBuffer(cmd);
+    vkQueueSubmit(handle->device->graphics, 1, &sinf, fence);
+    vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkResetFences(dev, 1, &fence);
+    return true;
+  }
+
+  r.imageExtent = {width, 1, 1};
+  for (std::size_t i = 0; i < height; ++i) {
+    auto const bufByteOffset = i * rowSizeInBytes;
+    std::memcpy(stagingData, (char const *)src + bufByteOffset, rowSizeInBytes);
+    r.imageOffset.y = i;
+
+    vkBeginCommandBuffer(cmd, &beginInfo);
+    vkCmdCopyBufferToImage(
+        cmd, stagingBuf, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
+    vkEndCommandBuffer(cmd);
+    vkQueueSubmit(handle->device->graphics, 1, &sinf, fence);
+    vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkResetFences(dev, 1, &fence);
+  }
+
   return true;
 }
 
@@ -1331,14 +1362,8 @@ bool loadFromFile(Texture *const handle, std::string const &p) {
   }
   handle->stbImagePtr = {image, [](void *const ptr) { stbi_image_free(ptr); }};
 
-  VkDeviceSize const imgSize = x * y * 4;
-  if (imgSize > handle->backend->device->stagingBuffer.allocInfo.size) {
-    addErrMsg(handle->backend->logs,
-              __func__,
-              "The image is too big to fit in the staging buffer");
-    return false;
-  }
-
+  auto constexpr channels = uint32_t{4};
+  VkDeviceSize const imgSize = x * y * channels;
   if (!createImage2D(handle->backend,
                      x,
                      y,
@@ -1351,12 +1376,13 @@ bool loadFromFile(Texture *const handle, std::string const &p) {
     return false;
   }
 
-  std::memcpy(handle->backend->device->stagingBuffer.allocInfo.pMappedData,
-              image,
-              imgSize);
-
-  if (!copyBufferToImage(
-          handle->backend, sbuf, imgSize, handle->image.get(), x, y)) {
+  if (!copyBufferToImage(handle->backend,
+                         image,
+                         imgSize,
+                         handle->image.get(),
+                         x,
+                         y,
+                         channels)) {
     addErrMsg(
         handle->backend->logs, __func__, "Failed to copy texture image to gpu");
     return false;
@@ -1436,6 +1462,7 @@ bool copyDataToBuffer(VulkanBackend *const handle,
   VkCommandPoolCreateInfo pinf{};
   VkCommandPool pool{};
   pinf.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  pinf.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
   if (auto r = vkCreateCommandPool(dev, &pinf, 0, &pool); r != VK_SUCCESS) {
     addErrMsg(handle->logs, __func__, "Failed to create command pool");
@@ -1455,21 +1482,49 @@ bool copyDataToBuffer(VulkanBackend *const handle,
     return false;
   }
 
-  std::memcpy(handle->device->stagingBuffer.allocInfo.pMappedData, data, size);
-
+  auto const stagingData = handle->device->stagingBuffer.allocInfo.pMappedData;
+  auto const stagingSize = handle->device->stagingBuffer.allocInfo.size;
+  auto const stagingBuf = handle->device->stagingBuffer.handle.get();
+  VkBufferCopy r{.srcOffset = 0, .dstOffset = 0, .size = size};
   VkCommandBufferBeginInfo beginInfo{};
   beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  vkBeginCommandBuffer(cmd, &beginInfo);
-  VkBufferCopy r{.srcOffset = 0, .dstOffset = 0, .size = size};
-  vkCmdCopyBuffer(cmd, handle->device->stagingBuffer.handle.get(), dst, 1, &r);
-  vkEndCommandBuffer(cmd);
-
   VkSubmitInfo sinf{};
   sinf.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   sinf.commandBufferCount = 1;
   sinf.pCommandBuffers = &cmd;
+
+  std::size_t const cycleCount = size / stagingSize;
+  std::size_t const remainder = size % stagingSize;
+
+  for (std::size_t i = 0; i < cycleCount; ++i) {
+    void const *srcOffset = (char const *)data + i * stagingSize;
+    std::memcpy(stagingData, srcOffset, stagingSize);
+
+    vkBeginCommandBuffer(cmd, &beginInfo);
+    r.srcOffset = 0;
+    r.dstOffset = i * stagingSize;
+    r.size = stagingSize;
+    vkCmdCopyBuffer(cmd, stagingBuf, dst, 1, &r);
+    vkEndCommandBuffer(cmd);
+
+    vkQueueSubmit(handle->device->graphics, 1, &sinf, fence);
+    vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkResetFences(dev, 1, &fence);
+  }
+
+  std::memcpy(
+      stagingData, (char const *)data + cycleCount * stagingSize, remainder);
+
+  vkBeginCommandBuffer(cmd, &beginInfo);
+  r.srcOffset = 0;
+  r.dstOffset = cycleCount * stagingSize;
+  r.size = remainder;
+  vkCmdCopyBuffer(cmd, stagingBuf, dst, 1, &r);
+  vkEndCommandBuffer(cmd);
+
   vkQueueSubmit(handle->device->graphics, 1, &sinf, fence);
   vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
+  vkResetFences(dev, 1, &fence);
   return true;
 }
 
@@ -1477,19 +1532,11 @@ bool uploadObjectDataToGPU(Object *const handle) {
   if (!handle)
     return false;
 
+  auto sz = [](auto const &cont) { return cont.size() * sizeof(cont[0]); };
   auto &vb = handle->vertexBuffer;
   auto &vi = handle->indexBuffer;
   auto vk = handle->backend;
-  auto const stgSz = vk->device->stagingBuffer.allocInfo.size;
   VmaAllocation alloc;
-
-  auto sz = [](auto const &cont) { return cont.size() * sizeof(cont[0]); };
-  if (sz(handle->vertices) > stgSz || sz(handle->indices) > stgSz) {
-    addErrMsg(vk->logs,
-              __func__,
-              "The object model is too large to fit in staging buffer");
-    return false;
-  }
 
   if (!createBuffer(vk,
                     sz(handle->vertices),
