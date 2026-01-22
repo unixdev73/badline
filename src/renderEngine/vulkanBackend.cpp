@@ -2306,9 +2306,9 @@ bool createVulkanDevice(VulkanBackend *const handle) {
     return false;
   }
 
-  DevInfo *best = nullptr;
+  DevInfo *best = &minCapDevs.front();
   if (!handle->generalInfo->preferredGPU.size()) {
-    uint32_t maxSz;
+    uint32_t maxSz{};
     for (auto &dev : minCapDevs) {
       if (dev.maxImgSize > maxSz) {
         maxSz = dev.maxImgSize;
