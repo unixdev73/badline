@@ -162,7 +162,7 @@ struct VulkanBackend {
   std::unique_ptr<BackendInfo> generalInfo;
   std::unique_ptr<VulkanInstance> instance;
   std::unique_ptr<VulkanDevice> device;
-  std::vector<VulkanWindow> windows;
+  std::vector<std::unique_ptr<VulkanWindow>> windows;
 
   CustomUniqPtr<VkDescriptorPool_T> descPool;
   CustomUniqPtr<VkSampler_T> imageSampler;
@@ -2092,23 +2092,23 @@ bool createWindow(VulkanBackend *const handle,
   }
 
   auto const inst = handle->instance->handle.get();
-  VulkanWindow windowData;
+  auto windowData = std::make_unique<VulkanWindow>();
   if (!inst) {
     addErrMsg(handle->logs, __func__, "The instance hasn't been initialized");
     return false;
   }
-  windowData.handle = {w, [](auto *const p) { glfwDestroyWindow(p); }};
+  windowData->handle = {w, [](auto *const p) { glfwDestroyWindow(p); }};
 
   if (!createCommandPool(handle,
                          handle->device->graphicsFamilyIndex,
-                         &windowData.graphicsCmdPool)) {
+                         &windowData->graphicsCmdPool)) {
     addErrMsg(handle->logs, __func__, "Failed to create window command pool");
     return false;
   }
 
   if (!createCommandPool(handle,
                          handle->device->presentationFamilyIndex,
-                         &windowData.presentationCmdPool)) {
+                         &windowData->presentationCmdPool)) {
     addErrMsg(handle->logs, __func__, "Failed to create window command pool");
     return false;
   }
@@ -2118,29 +2118,29 @@ bool createWindow(VulkanBackend *const handle,
     addErrMsg(handle->logs, __func__, "Failed to create surface");
     return false;
   }
-  windowData.surface = {
+  windowData->surface = {
       surface, [inst](auto *const p) { vkDestroySurfaceKHR(inst, p, 0); }};
 
-  if (!createWindowSwapchain(handle, &windowData)) {
+  if (!createWindowSwapchain(handle, windowData.get())) {
     addErrMsg(handle->logs, __func__, "Failed to create swapchain");
     return false;
   }
 
-  if (!createWindowResources(handle, &windowData)) {
+  if (!createWindowResources(handle, windowData.get())) {
     addErrMsg(handle->logs, __func__, "Failed to create frame resources");
     return false;
   }
 
-  if (!transitionSwapchainImages(handle, &windowData)) {
+  if (!transitionSwapchainImages(handle, windowData.get())) {
     addErrMsg(handle->logs, __func__, "Failed to transition swapchain images");
     return false;
   }
 
-  windowData.windowWidth = width;
-  windowData.windowHeight = height;
-  windowData.logs = handle->logs;
+  windowData->windowWidth = width;
+  windowData->windowHeight = height;
+  windowData->logs = handle->logs;
   handle->windows.push_back(std::move(windowData));
-  *window = &handle->windows.back();
+  *window = handle->windows.back().get();
   return true;
 }
 

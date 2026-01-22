@@ -56,7 +56,9 @@ struct AppData {
   glm::mat4 vikingModel{1.f};
   glm::mat4 cubeModel{1.f};
   re::VulkanWindow *window{};
+  re::VulkanWindow *window2{};
   GLFWwindow *glfwWin{};
+  GLFWwindow *glfwWin2{};
   re::Texture *trump{};
   re::Object *cube{};
   re::Texture *vikingTex{};
@@ -122,9 +124,13 @@ bool run(AppData *const a) {
   a->vikingModel = glm::scale(a->vikingModel, glm::vec3{vkSc, vkSc, vkSc});
   a->vikingModel = glm::translate(a->vikingModel, glm::vec3{0, 0, -0.5f});
 
+  glfwSetWindowPos(a->glfwWin2, 640, 500);
+  glfwSetWindowPos(a->glfwWin, 0, 500);
+
   auto const minTime = std::chrono::milliseconds(17); // ~60 FPS
   auto beginFrame = std::chrono::steady_clock::now();
-  while (!glfwWindowShouldClose(a->glfwWin)) {
+  while (!glfwWindowShouldClose(a->glfwWin) &&
+         !glfwWindowShouldClose(a->glfwWin2)) {
     glfwPollEvents();
     bool quit = false;
 
@@ -152,6 +158,21 @@ bool run(AppData *const a) {
       }
 
       if (!re::render(a->backend, a->window)) {
+        re::printLogs(a->engine);
+        return false;
+      }
+
+      if (!re::stage(a->backend, a->vikingObj, a->vikingModel)) {
+        re::printLogs(a->engine);
+        return false;
+      }
+
+      if (!re::stage(a->backend, a->cube, a->cubeModel)) {
+        re::printLogs(a->engine);
+        return false;
+      }
+
+      if (!re::render(a->backend, a->window2)) {
         re::printLogs(a->engine);
         return false;
       }
@@ -229,38 +250,53 @@ bool createCube(AppData *const a) {
 }
 
 bool handleInput(AppData *const a, bool *const quit) {
-  if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_ESCAPE)) {
-    *quit = true;
-    return true;
+  if (!a->glfwWin || !a->glfwWin2) {
+    std::cerr << "Window handle = nullptr" << std::endl;
+    return false;
   }
 
-  float const angle = 0.05;
+  std::vector<GLFWwindow *> windows = {a->glfwWin, a->glfwWin2};
+  for (auto const win : windows) {
+    if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_ESCAPE)) {
+      *quit = true;
+      return true;
+    }
 
-  if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_X) &&
-      GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_RIGHT)) {
-    a->view = glm::rotate(a->view, angle, glm::vec3{1.f, 0, 0});
-    re::setCameraView(a->backend, a->view);
-  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_X) &&
-             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_LEFT)) {
-    a->view = glm::rotate(a->view, -angle, glm::vec3{1.f, 0, 0});
-    re::setCameraView(a->backend, a->view);
-  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_Y) &&
-             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_RIGHT)) {
-    a->view = glm::rotate(a->view, angle, glm::vec3{0, 1.f, 0});
-    re::setCameraView(a->backend, a->view);
-  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_Y) &&
-             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_LEFT)) {
-    a->view = glm::rotate(a->view, -angle, glm::vec3{0, 1.f, 0});
-    re::setCameraView(a->backend, a->view);
-  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_Z) &&
-             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_RIGHT)) {
-    a->view = glm::rotate(a->view, angle, glm::vec3{0, 0, 1.f});
-    re::setCameraView(a->backend, a->view);
-  } else if (GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_Z) &&
-             GLFW_PRESS == glfwGetKey(a->glfwWin, GLFW_KEY_LEFT)) {
-    a->view = glm::rotate(a->view, -angle, glm::vec3{0, 0, 1.f});
-    re::setCameraView(a->backend, a->view);
+    float const angle = 0.05;
+
+    if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_X) &&
+        GLFW_PRESS == glfwGetKey(win, GLFW_KEY_RIGHT)) {
+      a->view = glm::rotate(a->view, angle, glm::vec3{1.f, 0, 0});
+      re::setCameraView(a->backend, a->view);
+      return true;
+    } else if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_X) &&
+               GLFW_PRESS == glfwGetKey(win, GLFW_KEY_LEFT)) {
+      a->view = glm::rotate(a->view, -angle, glm::vec3{1.f, 0, 0});
+      re::setCameraView(a->backend, a->view);
+      return true;
+    } else if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_Y) &&
+               GLFW_PRESS == glfwGetKey(win, GLFW_KEY_RIGHT)) {
+      a->view = glm::rotate(a->view, angle, glm::vec3{0, 1.f, 0});
+      re::setCameraView(a->backend, a->view);
+      return true;
+    } else if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_Y) &&
+               GLFW_PRESS == glfwGetKey(win, GLFW_KEY_LEFT)) {
+      a->view = glm::rotate(a->view, -angle, glm::vec3{0, 1.f, 0});
+      re::setCameraView(a->backend, a->view);
+      return true;
+    } else if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_Z) &&
+               GLFW_PRESS == glfwGetKey(win, GLFW_KEY_RIGHT)) {
+      a->view = glm::rotate(a->view, angle, glm::vec3{0, 0, 1.f});
+      re::setCameraView(a->backend, a->view);
+      return true;
+    } else if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_Z) &&
+               GLFW_PRESS == glfwGetKey(win, GLFW_KEY_LEFT)) {
+      a->view = glm::rotate(a->view, -angle, glm::vec3{0, 0, 1.f});
+      re::setCameraView(a->backend, a->view);
+      return true;
+    }
   }
+
   return true;
 }
 
@@ -351,7 +387,17 @@ bool initializeEngine(AppData *const data) {
                         &data->window))
     return false;
 
+  if (!re::createWindow(data->backend,
+                        data->windowWidth,
+                        data->windowHeight,
+                        "Demo2",
+                        &data->window2))
+    return false;
+
   if (!re::getWindowHandle(data->window, &data->glfwWin))
+    return false;
+
+  if (!re::getWindowHandle(data->window2, &data->glfwWin2))
     return false;
 
   return true;
