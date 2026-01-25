@@ -372,17 +372,12 @@ bool setRenderBarriers(VulkanBackend *const backend,
                        VkImage const image) {
   if (!backend)
     return false;
-
-  VkImageMemoryBarrier2 barrier{}, barrier2{};
+  VkImageMemoryBarrier2 barrier{};
   barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
   barrier.image = image;
   barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-  barrier2 = barrier;
   VkDependencyInfo depInfo{};
   depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-  depInfo.imageMemoryBarrierCount = 1;
-  VkImageMemoryBarrier2 barriers[] = {barrier, barrier2};
-  depInfo.pImageMemoryBarriers = barriers;
 
   barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
   barrier.srcAccessMask = VK_ACCESS_2_NONE;
@@ -391,12 +386,36 @@ bool setRenderBarriers(VulkanBackend *const backend,
   barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
   barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
 
-  barrier2.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-  barrier2.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-  barrier2.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
-  barrier2.dstAccessMask = VK_ACCESS_2_NONE;
-  barrier2.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-  barrier2.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  VkImageMemoryBarrier2 barriers[] = {barrier};
+  depInfo.imageMemoryBarrierCount = sizeof(barriers) / sizeof(barriers[0]);
+  depInfo.pImageMemoryBarriers = barriers;
+
+  vkCmdPipelineBarrier2(cmd, &depInfo);
+  return true;
+}
+
+bool setPresentBarriers(VulkanBackend *const backend,
+                       VkCommandBuffer const cmd,
+                       VkImage const image) {
+  if (!backend)
+    return false;
+  VkImageMemoryBarrier2 barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+  barrier.image = image;
+  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  VkDependencyInfo depInfo{};
+  depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+
+  barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+  barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+  barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+  barrier.dstAccessMask = VK_ACCESS_2_NONE;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+  barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+  VkImageMemoryBarrier2 barriers[] = {barrier};
+  depInfo.imageMemoryBarrierCount = sizeof(barriers) / sizeof(barriers[0]);
+  depInfo.pImageMemoryBarriers = barriers;
 
   vkCmdPipelineBarrier2(cmd, &depInfo);
   return true;
@@ -509,6 +528,11 @@ bool render(VulkanBackend *const backend, VulkanWindow *const window) {
   }
 
   vkCmdEndRendering(cmd);
+
+  if (!setPresentBarriers(backend, cmd, window->images[img])) {
+    addErrMsg(backend->logs, __func__, "Failed to set present barriers");
+    return false;
+  }
   vkEndCommandBuffer(cmd);
 
   if (!submitDrawCalls(backend, window)) {
@@ -1080,6 +1104,7 @@ bool createImage2D(VulkanBackend *const backend,
 
 bool transitionImageLayout(VulkanBackend *const handle,
                            VkImage const dst,
+                           VkImageAspectFlags const aspect,
                            VkPipelineStageFlags2 const srcStage,
                            VkPipelineStageFlags2 const dstStage,
                            VkAccessFlags2 const srcFlags,
@@ -1145,7 +1170,7 @@ bool transitionImageLayout(VulkanBackend *const handle,
   imb.dstAccessMask = dstFlags;
   imb.oldLayout = oldLayout;
   imb.newLayout = newLayout;
-  imb.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  imb.subresourceRange.aspectMask = aspect;
   imb.subresourceRange.layerCount = 1;
   imb.subresourceRange.levelCount = 1;
   depInfo.pImageMemoryBarriers = &imb;
@@ -1390,6 +1415,7 @@ bool loadFromFile(Texture *const handle, std::string const &p) {
 
   if (!transitionImageLayout(handle->backend,
                              handle->image.get(),
+                             VK_IMAGE_ASPECT_COLOR_BIT,
                              VK_PIPELINE_STAGE_2_NONE,
                              VK_PIPELINE_STAGE_2_NONE,
                              VK_ACCESS_2_NONE,
@@ -2004,6 +2030,20 @@ bool createDepthAttachment(VulkanBackend *const backend,
 
   if (!createDepthImage(backend, width, height, &window->depthImage)) {
     addErrMsg(backend->logs, __func__, "Failed to create depth image");
+    return false;
+  }
+
+  if (!transitionImageLayout(backend,
+                             window->depthImage.get(),
+                             VK_IMAGE_ASPECT_DEPTH_BIT,
+                             VK_PIPELINE_STAGE_2_NONE,
+                             VK_PIPELINE_STAGE_2_NONE,
+                             VK_ACCESS_2_NONE,
+                             VK_ACCESS_2_NONE,
+                             VK_IMAGE_LAYOUT_UNDEFINED,
+                             VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)) {
+    addErrMsg(
+        backend->logs, __func__, "Failed to transition depth image layout");
     return false;
   }
 
