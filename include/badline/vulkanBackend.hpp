@@ -80,6 +80,11 @@ bool loadFromFile(Texture *const handle, std::string const &path);
 template <typename T>
 using CustomUniqPtr = std::unique_ptr<T, std::function<void(T *const)>>;
 
+bool setClearColor(VulkanBackend *const handle,
+                   float const r,
+                   float const g,
+                   float const b);
+
 bool stage(VulkanBackend *const handle,
            Object const *const object,
            glm::mat4 const &transform);

@@ -1,24 +1,18 @@
-add_executable(run
-	main.cpp
-)
-setCompileOptions(run)
+add_subdirectory(objectsAndTextures)
+add_subdirectory(snake)
 
-target_link_libraries(run
-	argParser
-	renderEngine
-)
-
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/assets/trump.jpg
- ${CMAKE_BINARY_DIR}/demo/assets/trump.jpg
- COPYONLY
+add_custom_target(copyShaders ALL COMMAND
+	${CMAKE_COMMAND} -E copy_directory
+	${CMAKE_BINARY_DIR}/src/renderEngine/shaders
+	${CMAKE_BINARY_DIR}/demo/objectsAndTextures/shaders
+	COMMAND
+	${CMAKE_COMMAND} -E copy_directory
+	${CMAKE_BINARY_DIR}/src/renderEngine/shaders
+	${CMAKE_BINARY_DIR}/demo/snake/shaders
 )
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/assets/viking_room.png
- ${CMAKE_BINARY_DIR}/demo/assets/viking_room.png
- COPYONLY
-)
-
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/assets/viking_room.obj
- ${CMAKE_BINARY_DIR}/demo/assets/viking_room.obj
- COPYONLY
+add_dependencies(copyShaders
+	vertexShader
+	fragmentShader
+	fragNoSamplerShader
 )

@@ -173,10 +173,23 @@ struct VulkanBackend {
 
   std::vector<ObjectInstance> objectsToRender;
   CustomUniqPtr<void> resourceUsageDoneGuard;
+  float r{}, g{}, b{};
 };
 } // namespace re
 
 namespace re {
+bool setClearColor(VulkanBackend *const handle,
+                   float const r,
+                   float const g,
+                   float const b) {
+  if (!handle)
+    return false;
+  handle->r = r;
+  handle->g = g;
+  handle->b = b;
+  return true;
+}
+
 bool createBuffer(VulkanBackend *const backend,
                   VkDeviceSize const bufferSize,
                   VkBufferUsageFlags const bufferUsage,
@@ -308,7 +321,10 @@ bool setupRenderingInfo(VulkanWindow *const window,
                         VkRenderingInfo *const renderingInfo,
                         VkRenderingAttachmentInfo *const color,
                         VkRenderingAttachmentInfo *const depth,
-                        uint32_t const imageIndex) {
+                        uint32_t const imageIndex,
+                        float const r,
+                        float const g,
+                        float const b) {
 
   *color = VkRenderingAttachmentInfo{
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -320,7 +336,7 @@ bool setupRenderingInfo(VulkanWindow *const window,
       .resolveImageLayout = {},
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = {.color = VkClearColorValue{.float32{0.f, 0.f, 0.f, 1.f}}}};
+      .clearValue = {.color = {.float32 = {r, g, b, 1.f}}}};
 
   *depth = VkRenderingAttachmentInfo{
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -459,8 +475,14 @@ bool render(VulkanBackend *const backend, VulkanWindow *const window) {
   VkRenderingAttachmentInfo depthAttachment{};
   VkRenderingInfo renderingInfo{};
 
-  if (!setupRenderingInfo(
-          window, &renderingInfo, &colorAttachment, &depthAttachment, img)) {
+  if (!setupRenderingInfo(window,
+                          &renderingInfo,
+                          &colorAttachment,
+                          &depthAttachment,
+                          img,
+                          backend->r,
+                          backend->g,
+                          backend->b)) {
     addErrMsg(backend->logs, __func__, "Failed to setup rendering info");
     return false;
   }

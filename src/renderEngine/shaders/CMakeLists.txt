@@ -13,18 +13,18 @@ endfunction()
 
 addShader(vertexShader
 	${CMAKE_CURRENT_SOURCE_DIR}/shader.vert
-	${CMAKE_BINARY_DIR}/demo/shaders/vertex.spv
+	${CMAKE_CURRENT_BINARY_DIR}/vertex.spv
 	"Compiling vertex shader"
 )
 
 addShader(fragmentShader
 	${CMAKE_CURRENT_SOURCE_DIR}/shader.frag
-	${CMAKE_BINARY_DIR}/demo/shaders/fragment.spv
+	${CMAKE_CURRENT_BINARY_DIR}/fragment.spv
 	"Compiling fragment shader"
 )
 
 addShader(fragNoSamplerShader
 	${CMAKE_CURRENT_SOURCE_DIR}/shaderNoSampler.frag
-	${CMAKE_BINARY_DIR}/demo/shaders/fragNoSampler.spv
+	${CMAKE_CURRENT_BINARY_DIR}/fragNoSampler.spv
 	"Compiling fragment-without-sampler shader"
 )
