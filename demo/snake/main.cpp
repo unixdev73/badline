@@ -41,16 +41,25 @@ using CustomUniqPtr = std::unique_ptr<T, std::function<void(T *const)>>;
 enum class Direction { Left, Right, Up, Down };
 
 Direction getOppositeDirection(Direction const d) {
+  Direction dir;
   switch (d) {
   case Direction::Down:
-    return Direction::Up;
+    dir = Direction::Up;
+    break;
+
   case Direction::Up:
-    return Direction::Down;
+    dir = Direction::Down;
+    break;
+
   case Direction::Left:
-    return Direction::Right;
+    dir = Direction::Right;
+    break;
+
   case Direction::Right:
-    return Direction::Left;
+    dir = Direction::Left;
+    break;
   }
+  return dir;
 }
 
 struct AppData {
@@ -219,7 +228,7 @@ bool run(AppData *const a) {
 
       std::set<std::pair<std::size_t, std::size_t>> chunks;
       bool bitten = false;
-      for (auto const piece : a->snakeBody) {
+      for (auto const& piece : a->snakeBody) {
         if (chunks.contains(piece)) {
           std::cout << "Game over: snake bit itself" << std::endl;
           bitten = true;

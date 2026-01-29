@@ -11,6 +11,8 @@ set(BUILD_TARGET_DOC "false" CACHE STRING "Build badline documentation")
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 set(CMAKE_CXX_STANDARD_REQUIRED 1)
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_BUILD_RPATH ${CMAKE_BUILD_RPATH} /usr/local/lib64)
+set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_RPATH} /usr/local/lib64)
 
 function(setCompileOptions targetName)
 	if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
