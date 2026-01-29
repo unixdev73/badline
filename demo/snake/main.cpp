@@ -31,6 +31,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <memory>
 #include <chrono>
 #include <array>
+#include <list>
 #include <set>
 
 namespace demo {
@@ -82,7 +83,7 @@ struct AppData {
 
   std::chrono::time_point<std::chrono::steady_clock> lastMove{};
   std::vector<std::pair<std::size_t, std::size_t>> snakeBody{};
-  Direction direction{Direction::Right};
+  std::list<Direction> directions{Direction::Right};
   std::pair<std::size_t, std::size_t> foodPos{};
   bool makeNewFood{true};
 
@@ -189,7 +190,11 @@ bool run(AppData *const a) {
           a->snakeBody.push_back(oldTail);
         }
 
-        switch (a->direction) {
+        auto direction = a->directions.front();
+        if (a->directions.size() > 1)
+          a->directions.pop_front();
+
+        switch (direction) {
         case Direction::Right:
           ++a->snakeBody.at(0).first;
           break;
@@ -351,26 +356,27 @@ bool handleInput(AppData *const a, bool *const quit) {
       return true;
     }
 
-    Direction newDirection{a->direction};
+    Direction newDirection{a->directions.front()};
 
     if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_RIGHT)) {
       newDirection = Direction::Right;
     }
 
-    else if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_DOWN)) {
+    if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_DOWN)) {
       newDirection = Direction::Down;
     }
 
-    else if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_LEFT)) {
+    if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_LEFT)) {
       newDirection = Direction::Left;
     }
 
-    else if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_UP)) {
+    if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_UP)) {
       newDirection = Direction::Up;
     }
 
-    if (newDirection != getOppositeDirection(a->direction))
-      a->direction = newDirection;
+    if (newDirection != getOppositeDirection(a->directions.front()))
+      if (newDirection != a->directions.front() && a->directions.size() <= 1)
+        a->directions.push_back(newDirection);
   }
 
   return true;
