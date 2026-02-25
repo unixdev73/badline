@@ -32,7 +32,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <chrono>
 #include <array>
 #include <list>
-#include <set>
 
 namespace demo {
 template <typename T>
@@ -40,80 +39,51 @@ using CustomUniqPtr = std::unique_ptr<T, std::function<void(T *const)>>;
 
 enum class Direction { Left, Right, Up, Down };
 
-Direction getOppositeDirection(Direction const d) {
-  Direction dir;
-  switch (d) {
-  case Direction::Down:
-    dir = Direction::Up;
-    break;
-
-  case Direction::Up:
-    dir = Direction::Down;
-    break;
-
-  case Direction::Left:
-    dir = Direction::Right;
-    break;
-
-  case Direction::Right:
-    dir = Direction::Left;
-    break;
-  }
-  return dir;
-}
-
 struct AppData {
+  // core objects
+  std::mt19937 rng{std::random_device{}()};
   int argc{};
   char const *const *argv{};
-
   CustomUniqPtr<ap::ArgParser> parserRAII{};
   CustomUniqPtr<void> glfw{};
   CustomUniqPtr<re::RenderEngine> engineRAII{};
-
   ap::ArgParser *parser{};
   int windowWidth{640};
   int windowHeight{480};
   bool printHelp{};
-
   re::RenderEngine *engine{};
   re::VulkanBackend *backend{};
-  glm::mat4 projection{1.f};
-  glm::mat4 view{1.f};
-  glm::mat4 cubeModel{1.f};
   re::VulkanWindow *window{};
   GLFWwindow *glfwWin{};
-  re::Texture *trump{};
-  re::Object *cube{};
-  re::Texture *schumer{};
-  re::Object *cube2{};
-
   std::array<unsigned short, 100> frameTimes{};
   std::size_t frameIdx{};
 
-  std::chrono::time_point<std::chrono::steady_clock> lastMove{};
-  std::vector<std::pair<std::size_t, std::size_t>> snakeBody{};
-  std::list<Direction> directions{Direction::Right};
+  // game common properties
+  std::size_t cubeSide{32};
+
+  // game camera objects
+  glm::mat4 projection{1.f};
+  glm::mat4 view{1.f};
+
+  // food objects
+  re::Texture *schumer{};
+  re::Object *cube2{};
   std::pair<std::size_t, std::size_t> foodPos{};
   bool makeNewFood{true};
 
-  std::mt19937 rng{std::random_device{}()};
+  // player objects
+  bool snakeOutOfBounds{}, extendSnake{}, snakeBitItself{};
+  glm::mat4 cubeModel{1.f};
+  re::Texture *trump{};
+  re::Object *cube{};
+  std::chrono::time_point<std::chrono::steady_clock> lastMove{};
+  std::vector<std::pair<std::size_t, std::size_t>> snakeBody{};
+  std::vector<Direction> directions{};
+  std::list<std::pair<std::pair<std::size_t, std::size_t>, Direction>>
+      dirChangePoints{};
 };
 
 bool initialize(AppData *const);
-void updateCWD(AppData *const);
-bool initializeArgParser(AppData *const);
-bool extractIf(ap::ArgParser *const, std::string const &, std::string *const);
-bool convert(std::string const &input, int *const output);
-bool extractCLI(AppData *const);
-CustomUniqPtr<ap::ArgParser> createArgParser();
-bool initializeGLFW(AppData *const);
-bool initializeEngine(AppData *const);
-CustomUniqPtr<re::RenderEngine> createRenderEngine();
-bool loadAssets(AppData *const);
-bool isFlag(ap::ArgParser *const, std::string const &flag);
-void printHelpMsg();
-bool handleInput(AppData *const, bool *const);
-bool createCube(AppData *const a, re::Texture *const, re::Object **const);
 bool run(AppData *const);
 } // namespace demo
 
@@ -136,164 +106,26 @@ int main(int const argc, char const *const *const argv) {
 }
 
 namespace demo {
-bool run(AppData *const a) {
-  float const bodySize = 32.f;
-  std::size_t const gridWidth = a->windowWidth / bodySize;
-  std::size_t const gridHeight = a->windowHeight / bodySize;
-  a->projection = glm::orthoRH_ZO(0.f,
-                                  (float)a->windowWidth,
-                                  0.f,
-                                  (float)a->windowHeight,
-                                  -2 * bodySize,
-                                  2 * bodySize);
-  re::setCameraProjection(a->backend, a->projection);
+Direction getOppositeDirection(Direction const d) {
+  Direction dir;
+  switch (d) {
+  case Direction::Down:
+    dir = Direction::Up;
+    break;
 
-  a->view = glm::lookAt(glm::vec3{0, 0, -bodySize / 2.f},
-                        glm::vec3{0, 0, 0},
-                        glm::vec3{0, -1.f, 0});
-  re::setCameraView(a->backend, a->view);
+  case Direction::Up:
+    dir = Direction::Down;
+    break;
 
-  if (!createCube(a, a->trump, &a->cube))
-    return false;
-  if (!createCube(a, a->schumer, &a->cube2))
-    return false;
-  float const cubeSc = bodySize;
-  a->cubeModel = glm::scale(glm::mat4{1.f}, glm::vec3{cubeSc, cubeSc, cubeSc});
+  case Direction::Left:
+    dir = Direction::Right;
+    break;
 
-  glfwSetWindowPos(a->glfwWin, 0, 0);
-
-  a->snakeBody.push_back({gridWidth / 2, gridHeight / 2});
-  re::setClearColor(a->backend, 0.4f, 0.0f, 0.6f);
-
-  namespace ch = std::chrono;
-  a->lastMove = ch::steady_clock::now();
-  auto const minTime = std::chrono::milliseconds(17); // ~60 FPS
-  auto beginFrame = std::chrono::steady_clock::now();
-
-  while (!glfwWindowShouldClose(a->glfwWin)) {
-    glfwPollEvents();
-    bool quit = false;
-
-    auto const diff = ch::duration_cast<ch::milliseconds>(
-        ch::steady_clock::now() - beginFrame);
-
-    a->frameTimes[a->frameIdx] = diff.count();
-    a->frameIdx = (a->frameIdx + 1) % a->frameTimes.size();
-
-    if (diff >= minTime) {
-      if (!handleInput(a, &quit))
-        return false;
-      if (quit)
-        break;
-
-      if (auto now = ch::steady_clock::now();
-          now - a->lastMove >= ch::milliseconds(250)) {
-        auto oldTail = a->snakeBody.back();
-
-        for (std::size_t i = a->snakeBody.size() - 1; i > 0; --i) {
-          a->snakeBody[i] = a->snakeBody[i - 1];
-        }
-
-        if (a->snakeBody.at(0) == a->foodPos) {
-          a->makeNewFood = true;
-          a->snakeBody.push_back(oldTail);
-        }
-
-        auto direction = a->directions.front();
-        if (a->directions.size() > 1)
-          a->directions.pop_front();
-
-        switch (direction) {
-        case Direction::Right:
-          ++a->snakeBody.at(0).first;
-          break;
-        case Direction::Down:
-          ++a->snakeBody.at(0).second;
-          break;
-        case Direction::Left:
-          --a->snakeBody.at(0).first;
-          break;
-        case Direction::Up:
-          --a->snakeBody.at(0).second;
-          break;
-        }
-        a->lastMove = now;
-      }
-
-      if (a->snakeBody.front().first > gridWidth ||
-          a->snakeBody.front().second > gridHeight) {
-        std::cout << "Game over: snake out of bounds" << std::endl;
-        break;
-      }
-
-      std::set<std::pair<std::size_t, std::size_t>> chunks;
-      bool bitten = false;
-      for (auto const& piece : a->snakeBody) {
-        if (chunks.contains(piece)) {
-          std::cout << "Game over: snake bit itself" << std::endl;
-          bitten = true;
-          break;
-        }
-        chunks.emplace(piece);
-        auto x = (piece.first * bodySize + bodySize / 2.f);
-        auto y = -(piece.second * bodySize + bodySize / 2.f);
-        auto const posMat =
-            glm::translate(glm::mat4{1.f}, glm::vec3{x, y, 0.f}) * a->cubeModel;
-
-        if (!re::stage(a->backend, a->cube, posMat)) {
-          re::printLogs(a->engine);
-          return false;
-        }
-      }
-      if (bitten)
-        break;
-
-      if (a->makeNewFood) {
-        std::size_t randomX{}, randomY{};
-        bool regen{};
-        do {
-          randomX = a->rng() % gridWidth;
-          randomY = a->rng() % gridHeight;
-          regen = false;
-          for (auto const &pos : a->snakeBody) {
-            if (randomX == pos.first && randomY == pos.second) {
-              regen = true;
-              break;
-            }
-          }
-        } while (regen);
-
-        a->foodPos = {randomX, randomY};
-        a->makeNewFood = false;
-      }
-
-      auto x = (a->foodPos.first * bodySize + bodySize / 2.f);
-      auto y = -(a->foodPos.second * bodySize + bodySize / 2.f);
-      auto const posMat =
-          glm::translate(glm::mat4{1.f}, glm::vec3{x, y, 0.f}) * a->cubeModel;
-
-      if (!re::stage(a->backend, a->cube2, posMat)) {
-        re::printLogs(a->engine);
-        return false;
-      }
-
-      if (!re::render(a->backend, a->window)) {
-        re::printLogs(a->engine);
-        return false;
-      }
-      beginFrame = std::chrono::steady_clock::now();
-    }
+  case Direction::Right:
+    dir = Direction::Left;
+    break;
   }
-
-  std::cout << "score: " << a->snakeBody.size() << std::endl;
-
-  float sum = 0.f;
-  for (auto const &e : a->frameTimes)
-    sum += static_cast<float>(e);
-  auto const avgFrameTime = sum / a->frameTimes.size();
-  std::cout << "AVG: " << avgFrameTime << " MS/F = ";
-  std::cout << (1.0 / avgFrameTime) * 1000.0 << " FPS" << std::endl;
-  return true;
+  return dir;
 }
 
 bool createCube(AppData *const a,
@@ -352,6 +184,37 @@ bool createCube(AppData *const a,
   return true;
 }
 
+bool initializeScene(AppData *const a) {
+  a->projection = glm::orthoRH_ZO(0.f,
+                                  (float)a->windowWidth,
+                                  0.f,
+                                  (float)a->windowHeight,
+                                  -2 * float(a->cubeSide),
+                                  2 * float(a->cubeSide));
+
+  a->view = glm::lookAt(glm::vec3{0, 0, -float(a->cubeSide) / 2.f},
+                        glm::vec3{0, 0, 0},
+                        glm::vec3{0, -1.f, 0});
+
+  if (!createCube(a, a->trump, &a->cube))
+    return false;
+  if (!createCube(a, a->schumer, &a->cube2))
+    return false;
+
+  float const cubeSc = a->cubeSide;
+  a->cubeModel = glm::scale(glm::mat4{1.f}, glm::vec3{cubeSc, cubeSc, cubeSc});
+  a->snakeBody.push_back({a->windowWidth / 2, a->windowHeight / 2});
+  a->directions.push_back(Direction::Right);
+
+  re::setCameraProjection(a->backend, a->projection);
+  re::setCameraView(a->backend, a->view);
+  re::setClearColor(a->backend, 0.4f, 0.0f, 0.6f);
+  glfwSetWindowPos(a->glfwWin, 0, 0);
+
+  a->lastMove = std::chrono::steady_clock::now();
+  return true;
+}
+
 bool handleInput(AppData *const a, bool *const quit) {
   if (!a->glfwWin) {
     std::cerr << "Window handle = nullptr" << std::endl;
@@ -365,7 +228,8 @@ bool handleInput(AppData *const a, bool *const quit) {
       return true;
     }
 
-    Direction newDirection{a->directions.front()};
+    Direction newDirection{a->directions.back()},
+        oldDirection{a->directions.back()};
 
     if (GLFW_PRESS == glfwGetKey(win, GLFW_KEY_RIGHT)) {
       newDirection = Direction::Right;
@@ -383,11 +247,236 @@ bool handleInput(AppData *const a, bool *const quit) {
       newDirection = Direction::Up;
     }
 
-    if (newDirection != getOppositeDirection(a->directions.front()))
-      if (newDirection != a->directions.front() && a->directions.size() <= 1)
-        a->directions.push_back(newDirection);
+    if (newDirection != getOppositeDirection(oldDirection))
+      if (newDirection != oldDirection) {
+        a->directions.back() = newDirection;
+        if (a->snakeBody.size() > 1)
+          a->dirChangePoints.push_back({a->snakeBody.back(), newDirection});
+      }
   }
 
+  return true;
+}
+
+void onGameExit(AppData *const a) {
+  if (a->snakeOutOfBounds)
+    std::cout << "snake out of bounds, ";
+  else if (a->snakeBitItself)
+    std::cout << "snake bit itself, ";
+  std::cout << "score: " << a->snakeBody.size() << std::endl;
+
+  float sum = 0.f;
+  for (auto const &e : a->frameTimes)
+    sum += static_cast<float>(e);
+  auto const avgFrameTime = sum / a->frameTimes.size();
+  std::cout << "AVG: " << avgFrameTime << " MS/F = ";
+  std::cout << (1.0 / avgFrameTime) * 1000.0 << " FPS" << std::endl;
+}
+
+void updateFood(AppData *const a) {
+  if (!a->makeNewFood)
+    return;
+
+  std::size_t x{}, y{};
+  bool generate = true;
+
+  while (generate) {
+    x = a->rng() % (a->windowWidth - a->cubeSide + 1) + a->cubeSide / 2;
+    y = a->rng() % (a->windowHeight - a->cubeSide + 1) + a->cubeSide / 2;
+    generate = false;
+
+    for (auto const &[sX, sY] : a->snakeBody)
+      if (x == sX && y == sY) {
+        generate = true;
+        break;
+      }
+  }
+
+  a->foodPos.first = x;
+  a->foodPos.second = y;
+  a->makeNewFood = false;
+}
+
+bool intersects(std::pair<std::pair<std::size_t, std::size_t>,
+                          std::pair<std::size_t, std::size_t>> const &a,
+                std::pair<std::pair<std::size_t, std::size_t>,
+                          std::pair<std::size_t, std::size_t>> const &b) {
+  auto const [a_pos, a_size] = a;
+  auto const [b_pos, b_size] = b;
+
+  auto const [ax, ay] = a_pos;
+  auto const [aw, ah] = a_size;
+
+  auto const [bx, by] = b_pos;
+  auto const [bw, bh] = b_size;
+
+  return !(ax + aw <= bx || ax >= bx + bw || ay + ah <= by || ay >= by + bh);
+}
+
+void updateSnake(AppData *const a) {
+  std::size_t const increment = 2;
+  std::size_t *x{};
+  std::size_t *y{};
+
+  std::unordered_map<Direction, std::pair<bool, std::size_t **>> shiftMap{
+      {Direction::Right, {1, &x}},
+      {Direction::Left, {0, &x}},
+      {Direction::Up, {0, &y}},
+      {Direction::Down, {1, &y}}};
+
+  {
+    std::pair const snakeSz(a->cubeSide, a->cubeSide);
+    auto const snakePos = a->snakeBody.back();
+    for (auto it = a->snakeBody.rbegin() + 2; it < a->snakeBody.rend(); ++it) {
+      if (intersects({snakePos, snakeSz}, {*it, snakeSz})) {
+        a->snakeBitItself = true;
+        return;
+      }
+    }
+  }
+
+  if (a->extendSnake) {
+    auto const head = a->snakeBody.back();
+    auto const hdir = a->directions.back();
+    if (hdir == Direction::Right)
+      a->snakeBody.push_back({head.first + a->cubeSide, head.second});
+    else if (hdir == Direction::Left)
+      a->snakeBody.push_back({head.first - a->cubeSide, head.second});
+    else if (hdir == Direction::Up)
+      a->snakeBody.push_back({head.first, head.second - a->cubeSide});
+    else
+      a->snakeBody.push_back({head.first, head.second + a->cubeSide});
+    a->directions.push_back(hdir);
+    a->extendSnake = false;
+  }
+
+  {
+    auto const [headX, headY] = a->snakeBody.back();
+    auto const direction = a->directions.back();
+    if (direction == Direction::Right &&
+        headX + increment + a->cubeSide / 2 > std::size_t(a->windowWidth)) {
+      a->snakeOutOfBounds = true;
+      return;
+    } else if (direction == Direction::Left &&
+               increment > headX - a->cubeSide / 2) {
+      a->snakeOutOfBounds = true;
+      return;
+    } else if (direction == Direction::Up &&
+               headY - increment - a->cubeSide / 2 == 0) {
+      a->snakeOutOfBounds = true;
+      return;
+    } else if (direction == Direction::Down &&
+               increment + headY + a->cubeSide / 2 >
+                   std::size_t(a->windowHeight)) {
+      a->snakeOutOfBounds = true;
+      return;
+    }
+  }
+
+  bool remove = false;
+  for (std::size_t i = 0; i < a->snakeBody.size(); ++i) {
+    auto const [op, axis] = shiftMap.at(a->directions[i]);
+    x = &a->snakeBody[i].first;
+    y = &a->snakeBody[i].second;
+    **axis = op ? **axis + increment : **axis - increment;
+    for (auto const &[pos, dir] : a->dirChangePoints) {
+      if (std::pair(*x, *y) == pos) {
+        a->directions[i] = dir;
+        if (i == 0)
+          remove = true;
+        break;
+      }
+    }
+  }
+
+  if (remove)
+    a->dirChangePoints.pop_front();
+}
+
+bool updateLogic(AppData *const a) {
+  updateFood(a);
+  updateSnake(a);
+
+  if (a->snakeOutOfBounds)
+    return true;
+
+  auto const tileSz = std::pair(a->cubeSide, a->cubeSide);
+  auto const head = a->snakeBody.back();
+
+  if (intersects(std::pair(a->foodPos, tileSz), std::pair(head, tileSz))) {
+    a->makeNewFood = true;
+    a->extendSnake = true;
+  }
+
+  return true;
+}
+
+bool stageScene(AppData *const a) {
+  for (auto const &[x, y] : a->snakeBody) {
+    if (!re::stage(a->backend,
+                   a->cube,
+                   glm::translate(glm::mat4{1}, glm::vec3(x, -1.f * y, 0.f)) *
+                       a->cubeModel)) {
+      std::cerr << "Failed to stage snake" << std::endl;
+      return false;
+    }
+  }
+
+  if (!re::stage(
+          a->backend,
+          a->cube2,
+          glm::translate(
+              glm::mat4{1},
+              glm::vec3(a->foodPos.first, -1.f * a->foodPos.second, 0.f)) *
+              a->cubeModel)) {
+    std::cerr << "Failed to stage food" << std::endl;
+    return false;
+  }
+  return true;
+}
+
+auto updateFrame(AppData *const a, auto const &beginFrame) {
+  namespace ch = std::chrono;
+  auto const diff =
+      ch::duration_cast<ch::milliseconds>(ch::steady_clock::now() - beginFrame);
+
+  a->frameTimes[a->frameIdx] = diff.count();
+  a->frameIdx = (a->frameIdx + 1) % a->frameTimes.size();
+  return diff;
+}
+
+bool run(AppData *const a) {
+  auto const minTime = std::chrono::milliseconds(17); // ~60 FPS
+  auto beginFrame = std::chrono::steady_clock::now();
+
+  while (!glfwWindowShouldClose(a->glfwWin)) {
+    bool quit = false;
+    glfwPollEvents();
+
+    if (auto diff = updateFrame(a, beginFrame); diff >= minTime) {
+      if (!handleInput(a, &quit))
+        return false;
+      if (quit)
+        break;
+
+      if (!updateLogic(a))
+        return false;
+      if (a->snakeOutOfBounds || a->snakeBitItself)
+        break;
+
+      if (!stageScene(a))
+        return false;
+
+      if (!re::render(a->backend, a->window)) {
+        re::printLogs(a->engine);
+        return false;
+      }
+
+      beginFrame = std::chrono::steady_clock::now();
+    }
+  }
+
+  onGameExit(a);
   return true;
 }
 
@@ -397,48 +486,136 @@ void printHelpMsg() {
   std::cout << std::endl;
 }
 
-bool initialize(AppData *const data) {
-  updateCWD(data);
+void updateCWD(AppData *const data) {
+  namespace fs = std::filesystem;
+  fs::current_path(fs::canonical(fs::path{data->argv[0]}.parent_path()));
+}
 
-  if (!initializeArgParser(data)) {
-    ap::printLogs(data->parser);
+CustomUniqPtr<ap::ArgParser> createArgParser() {
+  ap::ArgParser *handle{};
+  ap::create(&handle);
+  return {handle, ap::destroy};
+}
+
+CustomUniqPtr<re::RenderEngine> createRenderEngine() {
+  re::RenderEngine *handle{};
+  re::create(&handle);
+  return {handle, re::destroy};
+}
+
+bool extractIf(ap::ArgParser *const handle,
+               std::string const &option,
+               std::string *const value) {
+  if (!handle)
+    return false;
+
+  if (!option.size()) {
+    std::cerr << "Error: The option identifier is empty" << std::endl;
     return false;
   }
 
-  if (data->printHelp) {
-    demo::printHelpMsg();
-    return true;
-  }
-
-  if (!initializeGLFW(data))
-    return false;
-
-  if (!initializeEngine(data)) {
-    re::printLogs(data->engine);
+  if (!value) {
+    std::cerr << "Error: The value output variable = nullptr" << std::endl;
     return false;
   }
 
-  if (!loadAssets(data)) {
-    re::printLogs(data->engine);
+  unsigned count{};
+  if (!ap::getOptionCount(handle, option.c_str(), &count)) {
+    std::cerr << "Error: Failed to get option count" << std::endl;
     return false;
+  }
+
+  if (count) {
+    char const *val{};
+    if (!ap::getOptionValue(handle, option.c_str(), 0, &val)) {
+      std::cerr << "Error: Failed to get option value" << std::endl;
+      return false;
+    }
+    *value = val;
   }
 
   return true;
 }
 
-bool loadAssets(AppData *const data) {
-  if (!re::createTexture(data->backend, &data->trump))
+bool convert(std::string const &input, int *const output) {
+  int numVal = 0;
+  try {
+    numVal = std::stoi(input);
+  } catch (...) {
+    std::cerr << "Error: Failed to convert: " << input << " to number\n";
+    return false;
+  }
+
+  *output = numVal;
+  return true;
+}
+
+bool isFlag(ap::ArgParser *const handle, std::string const &flag) {
+  unsigned count{};
+  if (!ap::getFlagCount(handle, flag.c_str(), &count))
+    return false;
+  if (!count)
     return false;
 
-  if (!re::loadFromFile(data->trump, "./assets/trump.jpg"))
+  return true;
+}
+
+bool extractCLI(AppData *const data) {
+  if (!data)
     return false;
 
-  if (!re::createTexture(data->backend, &data->schumer))
+  std::string tmp{};
+  if (!extractIf(data->parser, "width", &tmp))
+    return false;
+  if (tmp.size() && !convert(tmp, &data->windowWidth))
     return false;
 
-  if (!re::loadFromFile(data->schumer, "./assets/schumer.jpg"))
+  if (!extractIf(data->parser, "height", &tmp))
+    return false;
+  if (tmp.size() && !convert(tmp, &data->windowHeight))
     return false;
 
+  if (isFlag(data->parser, "help"))
+    data->printHelp = true;
+
+  return true;
+}
+
+bool initializeArgParser(AppData *const data) {
+  data->parserRAII = createArgParser();
+  if (!data->parserRAII) {
+    std::cerr << "Error: Failed to create parser" << std::endl;
+    return false;
+  }
+  data->parser = data->parserRAII.get();
+
+  if (!ap::addOption(data->parser, "width"))
+    return false;
+
+  if (!ap::addOption(data->parser, "height"))
+    return false;
+
+  if (!ap::addFlag(data->parser, "help"))
+    return false;
+
+  if (data->argc > 1 && !ap::parse(data->parser, data->argv, 1, data->argc))
+    return false;
+
+  if (!extractCLI(data))
+    return false;
+
+  return true;
+}
+
+bool initializeGLFW(AppData *const data) {
+  if (!glfwInit()) {
+    std::cerr << "Error: Failed to initialize GLFW" << std::endl;
+    return false;
+  }
+  data->glfw = {malloc(1), [](auto *p) {
+                  free(p);
+                  glfwTerminate();
+                }};
   return true;
 }
 
@@ -478,136 +655,52 @@ bool initializeEngine(AppData *const data) {
   return true;
 }
 
-bool initializeGLFW(AppData *const data) {
-  if (!glfwInit()) {
-    std::cerr << "Error: Failed to initialize GLFW" << std::endl;
-    return false;
-  }
-  data->glfw = {malloc(1), [](auto *p) {
-                  free(p);
-                  glfwTerminate();
-                }};
-  return true;
-}
-
-bool initializeArgParser(AppData *const data) {
-  data->parserRAII = createArgParser();
-  if (!data->parserRAII) {
-    std::cerr << "Error: Failed to create parser" << std::endl;
-    return false;
-  }
-  data->parser = data->parserRAII.get();
-
-  if (!ap::addOption(data->parser, "width"))
+bool loadAssets(AppData *const data) {
+  if (!re::createTexture(data->backend, &data->trump))
     return false;
 
-  if (!ap::addOption(data->parser, "height"))
+  if (!re::loadFromFile(data->trump, "./assets/trump.jpg"))
     return false;
 
-  if (!ap::addFlag(data->parser, "help"))
+  if (!re::createTexture(data->backend, &data->schumer))
     return false;
 
-  if (data->argc > 1 && !ap::parse(data->parser, data->argv, 1, data->argc))
-    return false;
-
-  if (!extractCLI(data))
+  if (!re::loadFromFile(data->schumer, "./assets/schumer.jpg"))
     return false;
 
   return true;
 }
 
-bool extractCLI(AppData *const data) {
-  if (!data)
+bool initialize(AppData *const data) {
+  updateCWD(data);
+
+  if (!initializeArgParser(data)) {
+    ap::printLogs(data->parser);
+    return false;
+  }
+
+  if (data->printHelp) {
+    demo::printHelpMsg();
+    return true;
+  }
+
+  if (!initializeGLFW(data))
     return false;
 
-  std::string tmp{};
-  if (!extractIf(data->parser, "width", &tmp))
+  if (!initializeEngine(data)) {
+    re::printLogs(data->engine);
     return false;
-  if (tmp.size() && !convert(tmp, &data->windowWidth))
-    return false;
+  }
 
-  if (!extractIf(data->parser, "height", &tmp))
+  if (!loadAssets(data)) {
+    re::printLogs(data->engine);
     return false;
-  if (tmp.size() && !convert(tmp, &data->windowHeight))
+  }
+
+  if (!initializeScene(data)) {
+    std::cerr << "Failed to initialize scene" << std::endl;
     return false;
-
-  if (isFlag(data->parser, "help"))
-    data->printHelp = true;
-
+  }
   return true;
-}
-
-bool isFlag(ap::ArgParser *const handle, std::string const &flag) {
-  unsigned count{};
-  if (!ap::getFlagCount(handle, flag.c_str(), &count))
-    return false;
-  if (!count)
-    return false;
-
-  return true;
-}
-
-bool convert(std::string const &input, int *const output) {
-  int numVal = 0;
-  try {
-    numVal = std::stoi(input);
-  } catch (...) {
-    std::cerr << "Error: Failed to convert: " << input << " to number\n";
-    return false;
-  }
-
-  *output = numVal;
-  return true;
-}
-
-bool extractIf(ap::ArgParser *const handle,
-               std::string const &option,
-               std::string *const value) {
-  if (!handle)
-    return false;
-
-  if (!option.size()) {
-    std::cerr << "Error: The option identifier is empty" << std::endl;
-    return false;
-  }
-
-  if (!value) {
-    std::cerr << "Error: The value output variable = nullptr" << std::endl;
-    return false;
-  }
-
-  unsigned count{};
-  if (!ap::getOptionCount(handle, option.c_str(), &count)) {
-    std::cerr << "Error: Failed to get option count" << std::endl;
-    return false;
-  }
-
-  if (count) {
-    char const *val{};
-    if (!ap::getOptionValue(handle, option.c_str(), 0, &val)) {
-      std::cerr << "Error: Failed to get option value" << std::endl;
-      return false;
-    }
-    *value = val;
-  }
-
-  return true;
-}
-
-void updateCWD(AppData *const data) {
-  namespace fs = std::filesystem;
-  fs::current_path(fs::canonical(fs::path{data->argv[0]}.parent_path()));
-}
-
-CustomUniqPtr<ap::ArgParser> createArgParser() {
-  ap::ArgParser *handle{};
-  ap::create(&handle);
-  return {handle, ap::destroy};
-}
-
-CustomUniqPtr<re::RenderEngine> createRenderEngine() {
-  re::RenderEngine *handle{};
-  re::create(&handle);
-  return {handle, re::destroy};
 }
 } // namespace demo
