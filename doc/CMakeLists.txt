@@ -1,5 +1,10 @@
-find_program(clangUmlBin clang-uml REQUIRED)
-find_program(plantUmlBin plantuml REQUIRED)
+if (UNIX)
+	find_program(clangUmlBin clang-uml REQUIRED)
+	find_program(plantUmlBin plantuml REQUIRED)
+elseif(WIN32)
+	find_program(clangUmlBin clang-uml PATHS "C:/Program Files/clang-uml/bin" REQUIRED)
+	find_program(plantUmlBin plantuml PATHS "C:/Program Files/plant-uml" REQUIRED)
+endif()
 
 add_custom_target(umlDoc
 	COMMAND ${clangUmlBin} -c ${CMAKE_SOURCE_DIR}/.clang-uml

@@ -19,12 +19,13 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <badline/argParser.hpp>
-#include <functional>
 #include <fstream>
+#include <functional>
 #include <iostream>
-#include <ranges>
-#include <vector>
 #include <memory>
+#include <ranges>
+#include <string>
+#include <vector>
 
 using SmartArgParser =
     std::unique_ptr<ap::ArgParser, std::function<void(ap::ArgParser *const)>>;
