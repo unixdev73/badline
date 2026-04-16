@@ -48,6 +48,4 @@ void addErrMsg(Logs *const handle,
 void printLog(std::string const &entry,
               std::size_t const indentSize = 0,
               bool flush = true);
-
-void printLogs(Logs const *const handle);
 } // namespace ap

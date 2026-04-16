@@ -105,10 +105,8 @@ int main(int const argc, char const *const *const argv) {
   }
 
   auto result = ap::parse(handle, argv, offset, argc);
-  if (!result) {
-    printLogs(handle);
+  if (!result)
     return 5;
-  }
 
   return 0;
 }

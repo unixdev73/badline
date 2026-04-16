@@ -467,10 +467,8 @@ bool run(AppData *const a) {
       if (!stageScene(a))
         return false;
 
-      if (!re::render(a->backend, a->window)) {
-        re::printLogs(a->engine);
+      if (!re::render(a->backend, a->window))
         return false;
-      }
 
       beginFrame = std::chrono::steady_clock::now();
     }
@@ -674,10 +672,8 @@ bool loadAssets(AppData *const data) {
 bool initialize(AppData *const data) {
   updateCWD(data);
 
-  if (!initializeArgParser(data)) {
-    ap::printLogs(data->parser);
+  if (!initializeArgParser(data))
     return false;
-  }
 
   if (data->printHelp) {
     demo::printHelpMsg();
@@ -687,15 +683,11 @@ bool initialize(AppData *const data) {
   if (!initializeGLFW(data))
     return false;
 
-  if (!initializeEngine(data)) {
-    re::printLogs(data->engine);
+  if (!initializeEngine(data))
     return false;
-  }
 
-  if (!loadAssets(data)) {
-    re::printLogs(data->engine);
+  if (!loadAssets(data))
     return false;
-  }
 
   if (!initializeScene(data)) {
     std::cerr << "Failed to initialize scene" << std::endl;

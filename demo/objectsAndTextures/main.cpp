@@ -147,35 +147,23 @@ bool run(AppData *const a) {
       if (quit)
         break;
 
-      if (!re::stage(a->backend, a->vikingObj, a->vikingModel)) {
-        re::printLogs(a->engine);
+      if (!re::stage(a->backend, a->vikingObj, a->vikingModel))
         return false;
-      }
 
-      if (!re::stage(a->backend, a->cube, a->cubeModel)) {
-        re::printLogs(a->engine);
+      if (!re::stage(a->backend, a->cube, a->cubeModel))
         return false;
-      }
 
-      if (!re::render(a->backend, a->window)) {
-        re::printLogs(a->engine);
+      if (!re::render(a->backend, a->window))
         return false;
-      }
 
-      if (!re::stage(a->backend, a->vikingObj, a->vikingModel)) {
-        re::printLogs(a->engine);
+      if (!re::stage(a->backend, a->vikingObj, a->vikingModel))
         return false;
-      }
 
-      if (!re::stage(a->backend, a->cube, a->cubeModel)) {
-        re::printLogs(a->engine);
+      if (!re::stage(a->backend, a->cube, a->cubeModel))
         return false;
-      }
 
-      if (!re::render(a->backend, a->window2)) {
-        re::printLogs(a->engine);
+      if (!re::render(a->backend, a->window2))
         return false;
-      }
 
       beginFrame = std::chrono::steady_clock::now();
     }
@@ -309,10 +297,8 @@ void printHelpMsg() {
 bool initialize(AppData *const data) {
   updateCWD(data);
 
-  if (!initializeArgParser(data)) {
-    ap::printLogs(data->parser);
+  if (!initializeArgParser(data))
     return false;
-  }
 
   if (data->printHelp) {
     demo::printHelpMsg();
@@ -322,15 +308,11 @@ bool initialize(AppData *const data) {
   if (!initializeGLFW(data))
     return false;
 
-  if (!initializeEngine(data)) {
-    re::printLogs(data->engine);
+  if (!initializeEngine(data))
     return false;
-  }
 
-  if (!loadAssets(data)) {
-    re::printLogs(data->engine);
+  if (!loadAssets(data))
     return false;
-  }
 
   return true;
 }

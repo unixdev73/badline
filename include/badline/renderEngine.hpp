@@ -46,11 +46,4 @@ bool createBackend(RenderEngine *const handle, VulkanBackend **const p);
 void enableInfoLogs(RenderEngine *const handle);
 
 void enableWarnings(RenderEngine *const handle);
-
-/* The render engine module stores all errors at all levels,
- * so when a function deep within the module fails,
- * the full trace is included alongside the messages.
- * You're welcome :)
- */
-void printLogs(RenderEngine const *const handle);
 } // namespace re

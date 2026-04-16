@@ -81,6 +81,4 @@ bool getFreeValuePosition(ArgParser const *const handle,
 bool getFreeValue(ArgParser const *const handle,
                   unsigned const instance,
                   char const **const value);
-
-void printLogs(ArgParser const *const);
 } // namespace ap

@@ -67,17 +67,13 @@ int main(int const argc, char const *const *const argv) {
     bool const shV = keyVal.size() == 2 && keyVal[1][0] != 0;
     auto result =
         ap::addFlag(handle, keyVal[0].c_str(), shV ? keyVal[1][0] : 0);
-    if (!result) {
-      ap::printLogs(handle);
+    if (!result)
       return 4;
-    }
   }
 
   auto result = ap::parse(handle, argv, offset, argc);
-  if (!result) {
-    ap::printLogs(handle);
+  if (!result)
     return 5;
-  }
 
   return 0;
 }

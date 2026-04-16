@@ -19,11 +19,9 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <iostream>
-#include <vector>
 
 namespace re {
 struct Logs {
-  std::vector<std::string> logs;
   bool enableWrn{false};
   bool enableInf{false};
 };
@@ -44,15 +42,6 @@ void enableInf(Logs *const handle) {
 void enableWrn(Logs *const handle) {
   if (handle)
     handle->enableWrn = true;
-}
-
-void addMsg(Logs *const handle,
-            std::string const &tag,
-            std::string const &msg) {
-  if (!handle)
-    return;
-
-  handle->logs.push_back(tag + ": " + msg);
 }
 
 void printLog(std::string const &entry,
@@ -107,23 +96,6 @@ void addErrMsg(Logs *const handle,
   if (msg.empty())
     return;
 
-  addMsg(handle, "ERR: " + tag, msg);
-}
-
-void printLogs(Logs const *const handle) {
-  if (!handle)
-    return;
-
-  std::size_t indent = 0;
-
-  for (auto const &entry : handle->logs) {
-    if (!entry.size())
-      continue;
-    printLog(entry, indent, false);
-    indent += 2;
-  }
-
-  std::cout << std::flush;
-  std::cerr << std::flush;
+  printLog("ERR: " + tag + ": " + msg, 0);
 }
 } // namespace re

@@ -421,11 +421,6 @@ bool getFreeValue(ArgParser const *const handle,
   return true;
 }
 
-void printLogs(ArgParser const *const handle) {
-  if (handle)
-    printLogs(handle->logs.get());
-}
-
 void addErrMsg(ArgParser const *const handle,
                std::string const &tag,
                std::string const &msg) {

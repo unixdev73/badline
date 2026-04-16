@@ -86,9 +86,4 @@ void enableWarnings(RenderEngine *const handle) {
   if (handle)
     enableWrn(handle->logs.get());
 }
-
-void printLogs(RenderEngine const *const handle) {
-  if (handle)
-    printLogs(handle->logs.get());
-}
 } // namespace re
