@@ -21,6 +21,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/vulkanBackend.hpp>
 #include <badline/renderEngine.hpp>
 #include <badline/argParser.hpp>
+#include <badline/vertexData.hpp>
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/glm.hpp>
@@ -32,6 +33,12 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <chrono>
 #include <array>
 #include <list>
+
+namespace re {
+bool setFontlessText(Object *const object,
+                     std::string const &text,
+                     float const spacing);
+}
 
 namespace demo {
 template <typename T>
@@ -78,9 +85,15 @@ struct AppData {
   re::Object *cube{};
   std::chrono::time_point<std::chrono::steady_clock> lastMove{};
   std::vector<std::pair<std::size_t, std::size_t>> snakeBody{};
+  std::size_t score{};
+  bool updateScore{};
   std::vector<Direction> directions{};
   std::list<std::pair<std::pair<std::size_t, std::size_t>, Direction>>
       dirChangePoints{};
+
+  // user interface
+  re::Object *text1{};
+  glm::mat4 textModel{};
 };
 
 bool initialize(AppData *const);
@@ -184,6 +197,23 @@ bool createCube(AppData *const a,
   return true;
 }
 
+bool initializeUI(AppData *const a) {
+  if (!re::createObject(a->backend, 0, &a->text1)) {
+    std::cerr << "ERROR: Failed to create text1 object" << std::endl;
+    return false;
+  }
+
+  a->textModel = glm::translate(glm::mat4{1}, glm::vec3(50.f, -10.f, 0.f)) *
+                 glm::scale(glm::mat4{1}, glm::vec3(1.f, 1.f, 0.f));
+
+  if (!setFontlessText(a->text1, "SCORE = 0", 1.f)) {
+    std::cerr << "ERROR: Failed to set fontless text" << std::endl;
+    return false;
+  }
+
+  return true;
+}
+
 bool initializeScene(AppData *const a) {
   a->projection = glm::orthoRH_ZO(0.f,
                                   (float)a->windowWidth,
@@ -212,6 +242,12 @@ bool initializeScene(AppData *const a) {
   glfwSetWindowPos(a->glfwWin, 0, 0);
 
   a->lastMove = std::chrono::steady_clock::now();
+
+  if (!initializeUI(a)) {
+    std::cerr << "ERROR: Failed to initialize user interface" << std::endl;
+    return false;
+  }
+
   return true;
 }
 
@@ -348,6 +384,8 @@ void updateSnake(AppData *const a) {
       a->snakeBody.push_back({head.first, head.second + a->cubeSide});
     a->directions.push_back(hdir);
     a->extendSnake = false;
+    ++a->score;
+    a->updateScore = true;
   }
 
   {
@@ -412,6 +450,11 @@ bool updateLogic(AppData *const a) {
 }
 
 bool stageScene(AppData *const a) {
+  if (!re::stage(a->backend, a->text1, a->textModel)) {
+    std::cerr << "Failed to stage text1" << std::endl;
+    return false;
+  }
+
   for (auto const &[x, y] : a->snakeBody) {
     if (!re::stage(a->backend,
                    a->cube,
@@ -432,6 +475,7 @@ bool stageScene(AppData *const a) {
     std::cerr << "Failed to stage food" << std::endl;
     return false;
   }
+
   return true;
 }
 
@@ -463,6 +507,15 @@ bool run(AppData *const a) {
         return false;
       if (a->snakeOutOfBounds || a->snakeBitItself)
         break;
+
+      if (a->updateScore) {
+        if (!setFontlessText(
+                a->text1, "SCORE = " + std::to_string(a->score), 1.f)) {
+          std::cerr << "ERROR: Failed to set fontless text" << std::endl;
+          return false;
+        }
+        a->updateScore = false;
+      }
 
       if (!stageScene(a))
         return false;

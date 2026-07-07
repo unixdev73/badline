@@ -19,13 +19,13 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "smartResource.hpp"
+#include "object.hpp"
 #include "logs.hpp"
 
 #include <badline/vulkanBackend.hpp>
 #include <vulkan/vk_enum_string_helper.h>
-#include <vulkan/vulkan.h>
-#include "vk_mem_alloc.h"
-#include "vulkan/vulkan_core.h"
+
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #define TINYOBJLOADER_USE_MAPBOX_EARCUT
@@ -36,7 +36,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #define STBI_NO_SIMD
 #include "stb_image.h"
 
-#include <glm/glm.hpp>
 #include <filesystem>
 #include <fstream>
 #include <cstddef>
@@ -56,11 +55,6 @@ struct BackendInfo {
 struct VulkanInstance {
   CustomUniqPtr<VkInstance_T> handle;
   unsigned activeVersionOfAPI{};
-};
-
-struct VulkanBuffer {
-  CustomUniqPtr<VkBuffer_T> handle;
-  VmaAllocationInfo allocInfo;
 };
 
 struct VulkanDevice {
@@ -105,46 +99,6 @@ struct VulkanWindow {
 struct PushConstants {
   glm::mat4 model;
   glm::mat4 view;
-};
-
-struct VulkanBackend;
-
-struct Texture {
-  Texture(VulkanBackend *const b) : backend{b} {}
-  VulkanBackend *backend{};
-  CustomUniqPtr<void> stbImagePtr;
-  unsigned width{}, height{}, channels{};
-  CustomUniqPtr<VkImage_T> image;
-  CustomUniqPtr<VkImageView_T> view;
-};
-
-struct VertexData {
-  glm::vec4 quad0; // posX, posY, posZ, texX
-  glm::vec4 quad1; // texY, norX, norY, norZ
-  glm::vec4 quad2; // colR, colG, colB, colA
-};
-
-inline bool operator==(re::VertexData const &a, re::VertexData const &b) {
-  return a.quad0 == b.quad0 && a.quad1 == b.quad1 && a.quad2 == b.quad2;
-}
-
-struct Object {
-  Object(VulkanBackend *const b, Texture const *const t)
-      : backend{b}, texture{t} {}
-  VulkanBackend *backend{};
-  Texture const *texture{};
-  std::vector<VertexData> vertices;
-  std::vector<unsigned> indices;
-  VulkanBuffer vertexBuffer;
-  VulkanBuffer indexBuffer;
-  CustomUniqPtr<VkDescriptorSet_T> descriptorSet;
-  VkPipelineLayout pipelineLayout{};
-  VkPipeline pipeline{};
-};
-
-struct ObjectInstance {
-  Object const *object;
-  glm::mat4 instance;
 };
 
 struct VulkanBackend {
@@ -745,34 +699,6 @@ bool prepareToLoadFromFile(Object *const handle,
   return true;
 }
 } // namespace re
-
-namespace std {
-template <> struct hash<re::VertexData> {
-  size_t operator()(const re::VertexData &v) const {
-    size_t h = 0;
-    auto combine = [](size_t lhs, size_t rhs) {
-      return lhs ^ (rhs + 0x9e3779b9 + (lhs << 6) + (lhs >> 2));
-    };
-
-    h = combine(h, hash<float>()(v.quad0.x));
-    h = combine(h, hash<float>()(v.quad0.y));
-    h = combine(h, hash<float>()(v.quad0.z));
-    h = combine(h, hash<float>()(v.quad0.w));
-
-    h = combine(h, hash<float>()(v.quad1.x));
-    h = combine(h, hash<float>()(v.quad1.y));
-    h = combine(h, hash<float>()(v.quad1.z));
-    h = combine(h, hash<float>()(v.quad1.w));
-
-    h = combine(h, hash<float>()(v.quad2.x));
-    h = combine(h, hash<float>()(v.quad2.y));
-    h = combine(h, hash<float>()(v.quad2.z));
-    h = combine(h, hash<float>()(v.quad2.w));
-
-    return h;
-  }
-};
-} // namespace std
 
 namespace re {
 bool createDescriptorPoolAndLayouts(VulkanBackend *const backend) {
@@ -1585,6 +1511,8 @@ bool uploadObjectDataToGPU(Object *const handle) {
   auto &vi = handle->indexBuffer;
   auto vk = handle->backend;
   VmaAllocation alloc;
+
+  vkQueueWaitIdle(handle->backend->device->graphics);
 
   if (!createBuffer(vk,
                     sz(handle->vertices),

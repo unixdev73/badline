@@ -17,6 +17,7 @@ endif()
 add_library(renderEngine
 	vulkanBackend.cpp
 	renderEngine.cpp
+	fontlessText.cpp
 	logs.cpp
 )
 

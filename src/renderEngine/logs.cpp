@@ -90,9 +90,7 @@ void addWrnMsg(Logs *const handle,
     printLog("WRN: " + tag + ": " + msg, 0);
 }
 
-void addErrMsg(Logs *const handle,
-               std::string const &tag,
-               std::string const &msg) {
+void addErrMsg(Logs *const, std::string const &tag, std::string const &msg) {
   if (msg.empty())
     return;
 
