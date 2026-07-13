@@ -34,12 +34,6 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <array>
 #include <list>
 
-namespace re {
-bool setFontlessText(Object *const object,
-                     std::string const &text,
-                     float const spacing);
-}
-
 namespace demo {
 template <typename T>
 using CustomUniqPtr = std::unique_ptr<T, std::function<void(T *const)>>;
@@ -204,9 +198,9 @@ bool initializeUI(AppData *const a) {
   }
 
   a->textModel = glm::translate(glm::mat4{1}, glm::vec3(50.f, -10.f, 0.f)) *
-                 glm::scale(glm::mat4{1}, glm::vec3(1.f, 1.f, 0.f));
+                 glm::scale(glm::mat4{1}, glm::vec3(5.f, 5.f, 0.f));
 
-  if (!setFontlessText(a->text1, "SCORE = 0", 1.f)) {
+  if (!setFontlessText(a->text1, "SCORE = 0")) {
     std::cerr << "ERROR: Failed to set fontless text" << std::endl;
     return false;
   }
@@ -510,7 +504,7 @@ bool run(AppData *const a) {
 
       if (a->updateScore) {
         if (!setFontlessText(
-                a->text1, "SCORE = " + std::to_string(a->score), 1.f)) {
+                a->text1, "SCORE = " + std::to_string(a->score))) {
           std::cerr << "ERROR: Failed to set fontless text" << std::endl;
           return false;
         }
@@ -686,9 +680,6 @@ bool initializeEngine(AppData *const data) {
 
   if (!re::enableValidationLayers(data->backend))
     return false;
-
-  // if (!re::setPreferredGPU(data->backend, ".*llvmpipe.*"))
-  //  return false;
 
   if (!re::initialize(data->backend))
     return false;

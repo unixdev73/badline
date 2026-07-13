@@ -73,10 +73,7 @@ bool uploadObjectDataToGPU(Object *const handle);
 
 bool loadFromFile(Object *const handle, std::string const &path);
 
-bool setFontlessText(Object *const object,
-                     glm::vec3 const &offset,
-                     float const scale,
-                     std::string const &text);
+bool setFontlessText(Object *const object, std::string const &text);
 
 bool createTexture(VulkanBackend *const handle, Texture **const object);
 

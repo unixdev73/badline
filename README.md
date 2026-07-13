@@ -16,7 +16,7 @@ On FreeBSD you can get it all like so:
 <p>
 sudo pkg install vulkan-headers vulkan-loader vulkan-tools
 vulkan-utility-libraries vulkan-validation-layers vulkan-extension-layer
-glfw glm
+glfw glm glslang clang-uml
 </p>
 
 # Building

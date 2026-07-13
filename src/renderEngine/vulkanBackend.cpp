@@ -86,6 +86,7 @@ struct VulkanWindow {
   CustomUniqPtr<VkSwapchainKHR_T> swapchain;
   std::vector<CustomUniqPtr<VkImageView_T>> imageViews;
   std::vector<VkImage> images;
+  std::unordered_map<VkImage, VkImageLayout> imageLayouts;
   std::vector<VulkanFrame> frames;
   VkSurfaceFormatKHR surfaceFormat;
   CustomUniqPtr<VkCommandPool_T> presentationCmdPool;
@@ -338,6 +339,7 @@ bool getNextImage(VulkanBackend *const backend,
 }
 
 bool setRenderBarriers(VulkanBackend *const backend,
+                       VulkanWindow *const window,
                        VkCommandBuffer const cmd,
                        VkImage const image) {
   if (!backend)
@@ -353,8 +355,9 @@ bool setRenderBarriers(VulkanBackend *const backend,
   barrier.srcAccessMask = VK_ACCESS_2_NONE;
   barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
   barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-  barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  barrier.oldLayout = window->imageLayouts.at(image);
   barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+  window->imageLayouts.at(image) = barrier.newLayout;
 
   VkImageMemoryBarrier2 barriers[] = {barrier};
   depInfo.imageMemoryBarrierCount = sizeof(barriers) / sizeof(barriers[0]);
@@ -365,6 +368,7 @@ bool setRenderBarriers(VulkanBackend *const backend,
 }
 
 bool setPresentBarriers(VulkanBackend *const backend,
+                       VulkanWindow* const window,
                        VkCommandBuffer const cmd,
                        VkImage const image) {
   if (!backend)
@@ -380,8 +384,9 @@ bool setPresentBarriers(VulkanBackend *const backend,
   barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
   barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
   barrier.dstAccessMask = VK_ACCESS_2_NONE;
-  barrier.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+  barrier.oldLayout = window->imageLayouts.at(image);
   barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  window->imageLayouts.at(image) = barrier.newLayout;
 
   VkImageMemoryBarrier2 barriers[] = {barrier};
   depInfo.imageMemoryBarrierCount = sizeof(barriers) / sizeof(barriers[0]);
@@ -420,7 +425,7 @@ bool render(VulkanBackend *const backend, VulkanWindow *const window) {
     return false;
   }
 
-  if (!setRenderBarriers(backend, cmd, window->images[img])) {
+  if (!setRenderBarriers(backend, window, cmd, window->images[img])) {
     addErrMsg(backend->logs, __func__, "Failed to set memory barriers");
     return false;
   }
@@ -505,7 +510,7 @@ bool render(VulkanBackend *const backend, VulkanWindow *const window) {
 
   vkCmdEndRendering(cmd);
 
-  if (!setPresentBarriers(backend, cmd, window->images[img])) {
+  if (!setPresentBarriers(backend, window, cmd, window->images[img])) {
     addErrMsg(backend->logs, __func__, "Failed to set present barriers");
     return false;
   }
@@ -1821,96 +1826,6 @@ bool createCommandPool(VulkanBackend *const backend,
   return true;
 }
 
-bool transitionSwapchainImages(VulkanBackend *const backend,
-                               VulkanWindow *const window) {
-  VkCommandBufferAllocateInfo bi{};
-  bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  bi.commandBufferCount = 1;
-  bi.commandPool = window->graphicsCmdPool.get();
-  bi.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
-  VkDevice dev = backend->device->handle.get();
-  if (!dev) {
-    addErrMsg(backend->logs, __func__, "The device hasn't been initialized");
-    return false;
-  }
-
-  VkCommandBuffer cmd;
-  if (auto r = vkAllocateCommandBuffers(dev, &bi, &cmd); r != VK_SUCCESS) {
-    addErrMsg(backend, __func__, "Failed to allocate command buffer", r);
-    return false;
-  }
-  CustomUniqPtr<VkCommandBuffer_T> cmdGuard = {
-      cmd, [dev, pool = bi.commandPool](auto *const) {
-        vkResetCommandPool(dev, pool, 0);
-      }};
-
-  VkCommandBufferBeginInfo cbi{};
-  cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  if (auto r = vkBeginCommandBuffer(cmd, &cbi); r != VK_SUCCESS) {
-    addErrMsg(backend, __func__, "Failed to begin recording command buffer", r);
-    return false;
-  }
-
-  VkImageMemoryBarrier2 barrier{};
-  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-  barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-  barrier.srcAccessMask = VK_ACCESS_2_NONE;
-  barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
-  barrier.dstAccessMask = VK_ACCESS_2_NONE;
-  barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-  VkDependencyInfo depInfo{};
-  depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-  depInfo.imageMemoryBarrierCount = 1;
-  depInfo.pImageMemoryBarriers = &barrier;
-
-  for (std::size_t i = 0; i < window->images.size(); ++i) {
-    barrier.image = window->images[i];
-    vkCmdPipelineBarrier2(cmd, &depInfo);
-  }
-
-  if (auto r = vkEndCommandBuffer(cmd); r != VK_SUCCESS) {
-    addErrMsg(backend, __func__, "Failed to end recording command buffer", r);
-    return false;
-  }
-
-  VkFenceCreateInfo finf{};
-  finf.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  VkFence fence{};
-  auto r = vkCreateFence(backend->device->handle.get(), &finf, 0, &fence);
-  if (r != VK_SUCCESS) {
-    addErrMsg(backend, __func__, "Failed to create fence", r);
-    return false;
-  }
-  CustomUniqPtr<VkFence_T> fencePtr = {
-      fence, [dev](VkFence_T *const p) { vkDestroyFence(dev, p, 0); }};
-
-  VkSubmitInfo2 submitInfo{};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-
-  submitInfo.commandBufferInfoCount = 1;
-  VkCommandBufferSubmitInfo cbsi{};
-  cbsi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-  cbsi.commandBuffer = cmd;
-  submitInfo.pCommandBufferInfos = &cbsi;
-
-  if (auto r = vkQueueSubmit2(backend->device->graphics, 1, &submitInfo, fence);
-      r != VK_SUCCESS) {
-    addErrMsg(backend, __func__, "Failed to submit command buffer", r);
-    return false;
-  }
-
-  if (auto r = vkWaitForFences(dev, 1, &fence, VK_TRUE, UINT64_MAX);
-      r != VK_SUCCESS) {
-    addErrMsg(backend, __func__, "Failed to wait for fence", r);
-    return false;
-  }
-
-  return true;
-}
-
 bool createFrameResources(VulkanBackend *const backend,
                           VulkanWindow *const window) {
   auto const dev = backend->device->handle.get();
@@ -2052,6 +1967,9 @@ bool createWindowResources(VulkanBackend *const backend,
     return false;
   }
 
+  for (auto image : window->images)
+    window->imageLayouts.emplace(image, VK_IMAGE_LAYOUT_UNDEFINED);
+
   VkImageView view{};
   VkImageViewCreateInfo vci{};
   vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2165,11 +2083,6 @@ bool createWindow(VulkanBackend *const handle,
 
   if (!createWindowResources(handle, windowData.get())) {
     addErrMsg(handle->logs, __func__, "Failed to create frame resources");
-    return false;
-  }
-
-  if (!transitionSwapchainImages(handle, windowData.get())) {
-    addErrMsg(handle->logs, __func__, "Failed to transition swapchain images");
     return false;
   }
 
