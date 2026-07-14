@@ -17,6 +17,7 @@ endif()
 
 set(BUILD_TARGET_ARG_PARSER "true" CACHE STRING "Build arg parser module")
 set(BUILD_TARGET_RENDER_ENGINE "true" CACHE STRING "Build render engine module")
+set(BUILD_TARGET_NETWORKING "true" CACHE STRING "Build networking module")
 set(BUILD_TARGET_TESTS "true" CACHE STRING "Build badline tests module")
 set(BUILD_TARGET_DEMO "true" CACHE STRING "Build badline demo module")
 set(BUILD_TARGET_DOC "true" CACHE STRING "Build badline documentation")
