@@ -22,8 +22,8 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <iostream>
 #include <thread>
 
-int main(int argc, char** argv) {
-  constexpr char const* const group = "224.0.0.1";
+int main(int argc, char **argv) {
+  constexpr char const *const group = "224.0.0.1";
   bool isServer = false;
   int port{};
 
@@ -33,21 +33,24 @@ int main(int argc, char** argv) {
   }
 
   if (argc == 2) {
-    try { port = std::stoi(argv[1]); } catch (...) {
-      std::cerr << "The input: " << argv[1]
-        << " is not a valid port number." << std::endl;
+    try {
+      port = std::stoi(argv[1]);
+    } catch (...) {
+      std::cerr << "The input: " << argv[1] << " is not a valid port number."
+                << std::endl;
       return 1;
     }
-  }
-  else {
+  } else {
     isServer = true;
     if (std::string{argv[1]} != "--server") {
       std::cerr << "Usage: [--server] port" << std::endl;
       return 1;
     }
-    try { port = std::stoi(argv[2]); } catch (...) {
-      std::cerr << "The input: " << argv[2]
-        << " is not a valid port number." << std::endl;
+    try {
+      port = std::stoi(argv[2]);
+    } catch (...) {
+      std::cerr << "The input: " << argv[2] << " is not a valid port number."
+                << std::endl;
       return 1;
     }
   }
@@ -62,15 +65,16 @@ int main(int argc, char** argv) {
   }
 
   /* AVOID WIRELESS */
-  ifaddrs* ifs{};
+  ifaddrs *ifs{};
   getifaddrs(&ifs);
   in_addr addr{};
 
-  for (auto* p = ifs; p; p = p->ifa_next) {
+  for (auto *p = ifs; p; p = p->ifa_next) {
     if (!p->ifa_addr)
       continue;
-    if (strcmp(p->ifa_name, "wlan0") != 0 && p->ifa_addr->sa_family == AF_INET) {
-      addr = ((sockaddr_in*)p->ifa_addr)->sin_addr;
+    if (strcmp(p->ifa_name, "wlan0") != 0 &&
+        p->ifa_addr->sa_family == AF_INET) {
+      addr = ((sockaddr_in *)p->ifa_addr)->sin_addr;
       break;
     }
   }
@@ -84,7 +88,8 @@ int main(int argc, char** argv) {
 
     in_addr multi{};
     multi.s_addr = addr.s_addr;
-    if (setsockopt(id, IPPROTO_IP, IP_MULTICAST_IF, &multi, sizeof(multi)) == -1) {
+    if (setsockopt(id, IPPROTO_IP, IP_MULTICAST_IF, &multi, sizeof(multi)) ==
+        -1) {
       std::cerr << "Failed to set server source interface" << std::endl;
       return 1;
     }
@@ -93,15 +98,15 @@ int main(int argc, char** argv) {
 
     while (1) {
       std::cout << "sending payload" << std::endl;
-      int len = sendto(id, msg, strlen(msg), 0, (sockaddr*)&target, sizeof(target));
+      int len =
+          sendto(id, msg, strlen(msg), 0, (sockaddr *)&target, sizeof(target));
       if (len == -1) {
         std::cerr << "Failed to send message" << std::endl;
         return 1;
       }
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-  }
-  else {
+  } else {
     ip_mreq req{};
     req.imr_multiaddr.s_addr = inet_addr(group);
     req.imr_interface.s_addr = addr.s_addr;
@@ -116,13 +121,15 @@ int main(int argc, char** argv) {
     clientinf.sin_port = htons(port);
     clientinf.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (bind(id, (sockaddr*)&clientinf, sizeof(clientinf)) == -1) {
+    if (bind(id, (sockaddr *)&clientinf, sizeof(clientinf)) == -1) {
       std::cerr << "Failed to bind client socket" << std::endl;
       return 1;
     }
 
-    if (setsockopt(id, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char*)&req, sizeof(req)) == -1) {
-      std::cerr << "Failed to configure client socket for multicast" << std::endl;
+    if (setsockopt(id, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&req,
+                   sizeof(req)) == -1) {
+      std::cerr << "Failed to configure client socket for multicast"
+                << std::endl;
       return 1;
     }
 
@@ -131,7 +138,7 @@ int main(int argc, char** argv) {
     while (1) {
       char data[sz];
       unsigned clientlen = sizeof(clientinf);
-      int len = recvfrom(id, data, sz, 0, (sockaddr*)&clientinf, &clientlen);
+      int len = recvfrom(id, data, sz, 0, (sockaddr *)&clientinf, &clientlen);
       if (len == -1) {
         std::cerr << "Failed to receive data" << std::endl;
         return 1;

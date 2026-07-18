@@ -1,6 +1,6 @@
 add_subdirectory(objectsAndTextures)
 add_subdirectory(snake)
-add_subdirectory(multicast)
+add_subdirectory(networking)
 
 if (MSVC)
 	add_custom_target(copyShaders ALL COMMAND

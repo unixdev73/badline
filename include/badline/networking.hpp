@@ -26,9 +26,18 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 
-namespace ne {
-struct MulticastUDP;
+#include <string>
+#include <vector>
 
-bool create(MulticastUDP** const);
-void destroy(MulticastUDP* const);
+namespace ne {
+struct Endpoint;
+
+bool create(Endpoint **const);
+void destroy(Endpoint *const);
+
+bool setActiveInterface(Endpoint *const, std::string const &interface);
+std::string const &getActiveInterface(Endpoint *const);
+
+std::vector<in_addr> getInterfaceAddressesIPv4(std::string const &interface);
+std::vector<in6_addr> getInterfaceAddressesIPv6(std::string const &interface);
 }
