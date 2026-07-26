@@ -23,7 +23,53 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <badline/networking.hpp>
 
 namespace ne {
-struct Endpoint {
-  std::string activeInterface{};
+constexpr char const MULTICAST_ADDRESS[] = "224.0.0.1";
+
+struct BLOM_ServerEndpoint {
+  static constexpr int MAX_BACKUP = 256;
+  int udpSocket{-1}; // Sender
+  char *udpOutDataStorage{};
+  int *udpOutDataSizes{};
+  int udpDataIndex{}; // Number of packet - used for retransmission
+
+  static constexpr int MAX_TCP_CONNECTIONS = 64;
+  int tcpSocket{-1};     // Listener
+  int *tcpConnections{}; // Receivers
+  char *tcpInDataStorage{};
+  int *tcpInDataSizes{};
+  int tcpActiveClient{};
 };
+
+struct BLOM_ClientEndpoint {
+  int udpSocket{-1}; // Receiver
+  char udpInDataStorage[BLOM_MAX_PACKET_SIZE];
+  int udpInDataSize{};
+  int udpDataIndex{}; // Expected number of packet
+
+  int tcpSocket{-1};        // Sender
+  in_addr tcpDestination{}; // Server address
+};
+
+struct BLOM_Endpoint {
+  union {
+    BLOM_ServerEndpoint server;
+    BLOM_ClientEndpoint client;
+  };
+};
+
+struct Endpoint {
+  // Common data
+  std::string activeInterface{};
+  in_addr activeAddress{};
+  std::size_t flags{};
+  int port{};
+
+  // Protocol-specific data
+  union {
+    BLOM_Endpoint blom;
+  };
+};
+
+void storeUDP(BLOM_ServerEndpoint *const handle, void *data,
+              std::size_t const size);
 } // namespace ne

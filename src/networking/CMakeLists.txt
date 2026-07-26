@@ -1,1 +1,1 @@
-add_library(badline_net networking.cpp query.cpp udp.cpp)
+add_library(badline_net networking.cpp query.cpp)

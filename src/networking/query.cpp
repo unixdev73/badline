@@ -79,12 +79,15 @@ bool setActiveInterface(Endpoint *const handle, std::string const &interface) {
 
   freeifaddrs(info);
 
-  if (name.size()) {
-    handle->activeInterface = name;
-    return true;
-  }
+  if (!name.size())
+    return false;
 
-  return false;
+  handle->activeInterface = name;
+
+  auto const addresses = getInterfaceAddressesIPv4(handle->activeInterface);
+  assert(addresses.size() && "The active interface must have an IPv4 address");
+  handle->activeAddress = addresses.front();
+  return true;
 }
 
 std::string const &getActiveInterface(Endpoint *const handle) {

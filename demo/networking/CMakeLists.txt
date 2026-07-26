@@ -2,3 +2,6 @@ add_executable(multicast multicast.cpp)
 
 add_executable(interface_query interface_query.cpp)
 target_link_libraries(interface_query badline_net)
+
+add_executable(blom_server_intro blom_server_intro.cpp)
+target_link_libraries(blom_server_intro badline_net argParser)

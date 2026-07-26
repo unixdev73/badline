@@ -30,9 +30,40 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <vector>
 
 namespace ne {
+enum EndpointCreationFlags : std::size_t {
+  ENDPOINT_CREATION_FLAGS_USAGE_SERVER = 1,
+  ENDPOINT_CREATION_FLAGS_USAGE_CLIENT = 1 << 1,
+  ENDPOINT_CREATION_FLAGS_PROTOCOL_BLOM = 1 << 2,
+  ENDPOINT_CREATION_FLAGS_VERBOSE = 1 << 3
+};
+
+enum BLOM_Type : unsigned char {
+  BLOM_TYPE_SERVER_ANNOUNCEMENT,
+};
+
+std::string to_string(BLOM_Type const);
+
+constexpr char const BLOM_HEADER_IDENTIFIER = 77;
+constexpr char const BLOM_HEADER_VERSION = 1;
+constexpr char const BLOM_MAX_ID_SIZE = 8;
+constexpr std::size_t const BLOM_MAX_PACKET_SIZE = 512;
+
+struct BLOM_UDP_Header {
+  unsigned char identifier = BLOM_HEADER_IDENTIFIER;
+  unsigned char version = BLOM_HEADER_VERSION;
+  unsigned char number = 0; // Used for retransmission
+  unsigned char type = 0;
+};
+
+struct BLOM_ServerAnnouncement {
+  BLOM_UDP_Header header{};
+  in_addr address{};
+};
+
 struct Endpoint;
 
-bool create(Endpoint **const);
+bool create(Endpoint **const, std::string const &ifc, int const port,
+            std::size_t const flags);
 void destroy(Endpoint *const);
 
 bool setActiveInterface(Endpoint *const, std::string const &interface);
@@ -40,4 +71,10 @@ std::string const &getActiveInterface(Endpoint *const);
 
 std::vector<in_addr> getInterfaceAddressesIPv4(std::string const &interface);
 std::vector<in6_addr> getInterfaceAddressesIPv6(std::string const &interface);
+
+void blomAnnounce(Endpoint *const handle);
+bool blomConnect(Endpoint *const handle);
+
+void blomSend(Endpoint *const handle, void *const data, int const size);
+void blomReceive(Endpoint *const handle, void *const data, int *const size);
 }
