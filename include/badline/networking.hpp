@@ -20,14 +20,25 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <ifaddrs.h>
-
 #include <string>
 #include <vector>
+
+#ifdef MCR_UNIX
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#elif defined(MCR_WINDOWS)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+#else
+#error "UNSUPPORTED PLATFORM"
+#endif
 
 namespace ne {
 enum EndpointCreationFlags : std::size_t {
@@ -66,12 +77,15 @@ bool create(Endpoint **const, std::string const &ifc, int const port,
             std::size_t const flags);
 void destroy(Endpoint *const);
 
-bool setActiveInterface(Endpoint *const, std::string const &interface);
+bool setActiveInterface(Endpoint *const, std::string const &ifc);
 std::string const &getActiveInterface(Endpoint *const);
 
-std::vector<in_addr> getInterfaceAddressesIPv4(std::string const &interface);
-std::vector<in6_addr> getInterfaceAddressesIPv6(std::string const &interface);
+std::vector<in_addr> getInterfaceAddressesIPv4(std::string const &ifc);
 std::string getLoopbackInterface();
+
+#ifdef MCR_UNIX
+std::vector<in6_addr> getInterfaceAddressesIPv6(std::string const &interface);
+#endif
 
 void blomAnnounce(Endpoint *const handle);
 bool blomConnect(Endpoint *const handle);

@@ -9,7 +9,11 @@ int main(int argc, char **argv) {
   assert(iface.size() > 1 && "The interface name must be valid");
 
   auto const ip4 = ne::getInterfaceAddressesIPv4(iface);
+#ifdef MCR_UNIX
   auto const ip6 = ne::getInterfaceAddressesIPv6(iface);
+#else
+  std::vector<std::string> ip6{};
+#endif
 
   if (ip4.empty() && ip6.empty()) {
     std::cout << "No addresses to show for interface: " << iface << std::endl;
@@ -20,6 +24,7 @@ int main(int argc, char **argv) {
   for (auto const &e : ip4)
     std::cout << "\t" << inet_ntoa(e) << std::endl;
 
+#ifdef MCR_UNIX
   for (auto const &e : ip6) {
     char str[INET6_ADDRSTRLEN];
 
@@ -30,4 +35,5 @@ int main(int argc, char **argv) {
 
     std::cout << '\t' << str << std::endl;
   }
+#endif
 }

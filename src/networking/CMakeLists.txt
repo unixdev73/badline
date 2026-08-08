@@ -1,2 +1,5 @@
 add_library(badlineNetworking networking.cpp query.cpp)
+if (WIN32)
+	target_link_libraries(badlineNetworking ws2_32 iphlpapi)
+endif()
 install(TARGETS badlineNetworking DESTINATION lib)

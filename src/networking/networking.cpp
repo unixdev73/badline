@@ -20,9 +20,28 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "./networking.hpp"
 #include <cassert>
-#include <fcntl.h>
 #include <iostream>
-#include <unistd.h>
+#include <memory>
+
+#ifdef MCR_WINDOWS
+using socklen_t = int32_t;
+
+auto close(int fd) { return closesocket(fd); }
+
+#define MCR_DATA_CAST (char const *)
+
+#else
+#define MCR_DATA_CAST
+#endif
+
+void setNonblocking(int fd) {
+#ifdef MCR_UNIX
+  fcntl(fd, F_SETFL, O_NONBLOCK);
+#else
+  u_long mode = 1;
+  ioctlsocket(fd, FIONBIO, &mode);
+#endif
+}
 
 #define MCRLOG(endp, str)                                                      \
   do {                                                                         \
@@ -32,6 +51,9 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
   } while (0);
 
 namespace ne {
+#ifdef MCR_WINDOWS
+static inline std::unique_ptr<WSADATA, void (*)(WSADATA *)> wsaData{0, 0};
+#endif
 
 void storeUDP(BLOM_ServerEndpoint *const handle, void *data,
               std::size_t const size) {
@@ -65,8 +87,8 @@ void blomSend(Endpoint *const handle, void *const data, int const size) {
     recipients.sin_port = htons(handle->port);
     recipients.sin_addr.s_addr = inet_addr(MULTICAST_ADDRESS);
 
-    assert(sendto(serv->udpSocket, data, size, 0, (sockaddr *)&recipients,
-                  sizeof(recipients)) != -1);
+    assert(sendto(serv->udpSocket, MCR_DATA_CAST data, size, 0,
+                  (sockaddr *)&recipients, sizeof(recipients)) != -1);
 
     storeUDP(serv, data, size);
     MCRLOG(handle, "Server finished sending data over UDP");
@@ -74,7 +96,7 @@ void blomSend(Endpoint *const handle, void *const data, int const size) {
   } else {
     MCRLOG(handle, "Client is sending data over TCP...");
     auto client = &handle->blom.client;
-    assert(send(client->tcpSocket, data, size, 0) != -1);
+    assert(send(client->tcpSocket, MCR_DATA_CAST data, size, 0) != -1);
     MCRLOG(handle, "Client finished sending data over TCP");
   }
 }
@@ -95,14 +117,18 @@ void blomReceive(Endpoint *const handle, void *const data, int *const size) {
       sockaddr_in addr{};
       auto asz = sizeof(addr);
       fd = accept(serv->tcpSocket, (sockaddr *)&addr, (socklen_t *)&asz);
+#ifdef MCR_UNIX
       if (fd == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+#else
+      if (fd == -1 && WSAGetLastError() == WSAEWOULDBLOCK) {
+#endif
         serv->tcpActiveClient = (serv->tcpActiveClient + 1) %
                                 BLOM_ServerEndpoint::MAX_TCP_CONNECTIONS;
         *size = 0;
         return;
       }
       assert(fd != -1);
-      fcntl(fd, F_SETFL, O_NONBLOCK);
+      setNonblocking(fd);
     }
 
     auto dst =
@@ -134,11 +160,21 @@ void blomReceive(Endpoint *const handle, void *const data, int *const size) {
     addr.sin_addr.s_addr = htons(INADDR_ANY);
     auto const addrSz = sizeof(addr);
 
+#ifdef MCR_UNIX
     int result = recvfrom(client->udpSocket, client->udpInDataStorage,
                           BLOM_MAX_PACKET_SIZE, MSG_DONTWAIT, (sockaddr *)&addr,
                           (socklen_t *)&addrSz);
+#else
+    int result = recvfrom(client->udpSocket, client->udpInDataStorage,
+                          BLOM_MAX_PACKET_SIZE, 0, (sockaddr *)&addr,
+                          (socklen_t *)&addrSz);
+#endif
 
+#ifdef MCR_UNIX
     if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+#else
+    if (result == -1 && WSAGetLastError() == WSAEWOULDBLOCK) {
+#endif
       *size = 0;
       return;
     }
@@ -165,12 +201,23 @@ bool blomConnect(Endpoint *const handle) {
   udpAddr.sin_addr.s_addr = htons(INADDR_ANY);
   auto const addrSz = sizeof(udpAddr);
 
+#ifdef MCR_UNIX
   int result = recvfrom(client->udpSocket, client->udpInDataStorage,
                         BLOM_MAX_PACKET_SIZE, MSG_DONTWAIT,
                         (sockaddr *)&udpAddr, (socklen_t *)&addrSz);
+#else
+  int result = recvfrom(client->udpSocket, client->udpInDataStorage,
+                        BLOM_MAX_PACKET_SIZE, 0, (sockaddr *)&udpAddr,
+                        (socklen_t *)&addrSz);
+#endif
 
+#ifdef MCR_UNIX
   if (result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
     return false;
+#else
+  if (result == -1 && WSAGetLastError() == WSAEWOULDBLOCK)
+    return false;
+#endif
   assert((result != -1) && "Failed to receive UDP packet");
 
   if (result != sizeof(BLOM_ServerAnnouncement))
@@ -228,7 +275,7 @@ void blomAnnounce(Endpoint *const handle) {
   data.address = handle->activeAddress;
 
   MCRLOG(handle, "Server is announcing its presence over UDP...");
-  assert(sendto(serv->udpSocket, &data, sizeof(data), 0,
+  assert(sendto(serv->udpSocket, MCR_DATA_CAST & data, sizeof(data), 0,
                 (sockaddr *)&recipients, sizeof(recipients)) != -1);
 
   storeUDP(serv, &data, sizeof(data));
@@ -254,7 +301,7 @@ void initialize_BLOM_server(Endpoint *const handle) {
   assert(serv->udpSocket != -1);
 
   assert(setsockopt(serv->udpSocket, IPPROTO_IP, IP_MULTICAST_IF,
-                    &handle->activeAddress,
+                    MCR_DATA_CAST & handle->activeAddress,
                     sizeof(handle->activeAddress)) != -1);
 
   MCRLOG(handle, "Server is allocating memory for UDP backend...");
@@ -293,7 +340,7 @@ void initialize_BLOM_server(Endpoint *const handle) {
   allocAndClear(serv->tcpInDataSizes,
                 BLOM_ServerEndpoint::MAX_TCP_CONNECTIONS * sizeof(int), -1);
 
-  fcntl(serv->tcpSocket, F_SETFL, O_NONBLOCK);
+  setNonblocking(serv->tcpSocket);
   MCRLOG(handle, "Server finished initializing TCP backend");
 }
 
@@ -307,6 +354,9 @@ void initialize_BLOM_client(Endpoint *const handle, int const port) {
   // Initialize UDP backend
   client->udpSocket = socket(PF_INET, SOCK_DGRAM, 0);
   assert(client->udpSocket != -1);
+#ifdef MCR_WINDOWS
+  setNonblocking(client->udpSocket);
+#endif
 
   sockaddr_in info{};
   info.sin_family = AF_INET;
@@ -322,8 +372,8 @@ void initialize_BLOM_client(Endpoint *const handle, int const port) {
   ip_mreq ip{};
   ip.imr_multiaddr.s_addr = inet_addr(MULTICAST_ADDRESS);
   ip.imr_interface.s_addr = handle->activeAddress.s_addr;
-  assert(setsockopt(client->udpSocket, IPPROTO_IP, IP_ADD_MEMBERSHIP, &ip,
-                    sizeof(ip)) != -1);
+  assert(setsockopt(client->udpSocket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+                    MCR_DATA_CAST & ip, sizeof(ip)) != -1);
 
   client->udpInDataSize = -1;
   client->udpDataIndex = 0;
@@ -333,8 +383,8 @@ void initialize_BLOM_client(Endpoint *const handle, int const port) {
   assert(client->tcpSocket != -1);
 }
 
-bool create(Endpoint **const handle, std::string const &interface,
-            int const port, std::size_t const flags) {
+bool create(Endpoint **const handle, std::string const &ifc, int const port,
+            std::size_t const flags) {
   assert(handle);
 
   bool const isServer = flags & ENDPOINT_CREATION_FLAGS_USAGE_SERVER;
@@ -343,6 +393,17 @@ bool create(Endpoint **const handle, std::string const &interface,
 
   bool const isBLOM = flags & ENDPOINT_CREATION_FLAGS_PROTOCOL_BLOM;
   assert(isBLOM && "A valid protocol must be specified");
+
+#ifdef MCR_WINDOWS
+  if (!wsaData) {
+    wsaData = {new WSADATA{}, [](auto *p) {
+                 WSACleanup();
+                 delete p;
+               }};
+    assert(!WSAStartup(MAKEWORD(2, 0), wsaData.get()) &&
+           "Failed to init socket lib");
+  }
+#endif
 
   auto guard = std::unique_ptr<Endpoint, void (*)(Endpoint *const)>{
       new Endpoint{}, destroy};
@@ -353,7 +414,7 @@ bool create(Endpoint **const handle, std::string const &interface,
   assert((port > 1024) && "Port number too low");
   guard->port = port;
 
-  if (!setActiveInterface(guard.get(), interface)) {
+  if (!setActiveInterface(guard.get(), ifc)) {
     return false;
   }
 
@@ -402,11 +463,12 @@ void destroy(Endpoint *const handle) {
   delete handle;
 }
 
-std::string to_string(BLOM_Type const type) {
-  switch (type) {
+std::string to_string(BLOM_Type const blomType) {
+  switch (blomType) {
   case BLOM_TYPE_SERVER_ANNOUNCEMENT:
     return "BLOM_TYPE_SERVER_ANNOUNCEMENT";
   default:
+    break;
   }
 
   return "";

@@ -35,10 +35,10 @@ createArgParser() {
 }
 
 std::unique_ptr<ne::Endpoint, void (*)(ne::Endpoint *const)>
-createEndpoint(std::string const &interface, int const port,
+createEndpoint(std::string const &ifc, int const port,
                std::size_t const flags) {
   ne::Endpoint *handle{};
-  ne::create(&handle, interface, port, flags);
+  ne::create(&handle, ifc, port, flags);
   assert(handle);
   return {handle, ne::destroy};
 }
@@ -57,14 +57,14 @@ int main(int argc, char **argv) {
   }
 
   unsigned server{}, ifaceCount{}, portCount{};
-  char const *interface{}, *portStr{};
+  char const *ifc{}, *portStr{};
   unsigned port{};
 
   ap::getFlagCount(parser.get(), "server", &server);
 
   ap::getOptionCount(parser.get(), "interface", &ifaceCount);
   assert(ifaceCount && "An interface must be supplied");
-  ap::getOptionValue(parser.get(), "interface", 0, &interface);
+  ap::getOptionValue(parser.get(), "interface", 0, &ifc);
 
   ap::getOptionCount(parser.get(), "port", &portCount);
   assert(portCount && "A port must be supplied");
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
 
   if (server) {
     auto endpoint =
-        createEndpoint(interface, port,
+        createEndpoint(ifc, port,
                        ne::ENDPOINT_CREATION_FLAGS_VERBOSE |
                            ne::ENDPOINT_CREATION_FLAGS_USAGE_SERVER |
                            ne::ENDPOINT_CREATION_FLAGS_PROTOCOL_BLOM);
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  auto endpoint = createEndpoint(interface, port,
+  auto endpoint = createEndpoint(ifc, port,
                                  ne::ENDPOINT_CREATION_FLAGS_VERBOSE |
                                      ne::ENDPOINT_CREATION_FLAGS_USAGE_CLIENT |
                                      ne::ENDPOINT_CREATION_FLAGS_PROTOCOL_BLOM);

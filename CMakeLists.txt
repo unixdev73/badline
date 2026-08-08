@@ -8,9 +8,11 @@ endif()
 
 if (WIN32)
 	message(STATUS "Detected Windows setup")
+	add_compile_definitions(MCR_WINDOWS)
 elseif(UNIX)
 	message(STATUS "Detected UNIX setup")
 	set(UNIX_DEBUG_CXX_FLAGS -Wall -Wextra -Wpedantic -Werror -O0 -g)
+	add_compile_definitions(MCR_UNIX)
 else()
 	message(FATAL_ERROR "Detected unsupported system: Only supports UNIX and Windows")
 endif()
@@ -69,7 +71,6 @@ if (WIN32)
 endif()
 
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
-
 add_subdirectory(include)
 add_subdirectory(src)
 
