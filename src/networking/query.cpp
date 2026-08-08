@@ -22,6 +22,25 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <cassert>
 
 namespace ne {
+std::string getLoopbackInterface() {
+  std::string out;
+  ifaddrs *info{};
+
+  if (getifaddrs(&info))
+    return {};
+
+  for (auto entry = info; entry; entry = entry->ifa_next) {
+    if (std::string(entry->ifa_name).find("lo") == 0 && entry->ifa_addr &&
+        entry->ifa_addr->sa_family == AF_INET) {
+      out = entry->ifa_name;
+      break;
+    }
+  }
+
+  freeifaddrs(info);
+  return out;
+}
+
 std::vector<in_addr> getInterfaceAddressesIPv4(std::string const &interface) {
   assert(interface.size() > 1);
   std::vector<in_addr> out{};

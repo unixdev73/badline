@@ -71,6 +71,7 @@ std::string const &getActiveInterface(Endpoint *const);
 
 std::vector<in_addr> getInterfaceAddressesIPv4(std::string const &interface);
 std::vector<in6_addr> getInterfaceAddressesIPv6(std::string const &interface);
+std::string getLoopbackInterface();
 
 void blomAnnounce(Endpoint *const handle);
 bool blomConnect(Endpoint *const handle);
