@@ -356,10 +356,13 @@ void updateSnake(AppData *const a) {
   {
     std::pair const snakeSz(a->cubeSide, a->cubeSide);
     auto const snakePos = a->snakeBody.back();
-    for (auto it = a->snakeBody.rbegin() + 2; it < a->snakeBody.rend(); ++it) {
-      if (intersects({snakePos, snakeSz}, {*it, snakeSz})) {
-        a->snakeBitItself = true;
-        return;
+    if (a->snakeBody.size() >= 3) {
+      for (auto it = a->snakeBody.rbegin() + 2; it != a->snakeBody.rend();
+           ++it) {
+        if (intersects({snakePos, snakeSz}, {*it, snakeSz})) {
+          a->snakeBitItself = true;
+          return;
+        }
       }
     }
   }
@@ -736,6 +739,7 @@ bool initialize(AppData *const data) {
     std::cerr << "Failed to initialize scene" << std::endl;
     return false;
   }
+
   return true;
 }
 } // namespace demo
