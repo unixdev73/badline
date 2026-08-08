@@ -41,13 +41,13 @@ For windows builds the following additional variables must be specified:
 An example configure command on windows might look like this:
 
 ```
-cmake -B ./badline_build -S ./badline -G"Visual Studio 18 2026" -DBADLINE_VULKAN_SDK_PATH="C:/VulkanSDK/1.4.335.0" -DBADLINE_GLFW_INCLUDE_PATH="C:/Users/c/Downloads/glfw-3.4.bin.WIN64/glfw-3.4.bin.WIN64/include" -DBADLINE_GLFW_LIB_PATH="C:/Users/c/Downloads/glfw-3.4.bin.WIN64/glfw-3.4.bin.WIN64/lib-vc2017/glfw3.lib"
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBADLINE_VULKAN_SDK_PATH="C:\VulkanSDK\1.4.335.0" -DBADLINE_GLFW_INCLUDE_PATH="C:\Users\c\Desktop\glfw\include" -DBADLINE_GLFW_LIB_PATH="C:\Users\c\Desktop\glfw\lib-vc2017/glfw3.lib"
 ```
 
 Then, to build:
 
 ```
-cmake --build ./badline_build --config Release
+cmake --build ./build
 ```
 
 # Documentation
@@ -68,7 +68,7 @@ It generates dependency diagrams of each module
 to understand the project more easily.
 
 ```
-cmake --build ./badline_build --target umlDoc
+cmake --build ./build --target umlDoc
 ```
 
 This target requires plantuml and clang-uml.
