@@ -1,1 +1,2 @@
-add_library(badline_net networking.cpp query.cpp)
+add_library(badlineNetworking networking.cpp query.cpp)
+install(TARGETS badlineNetworking DESTINATION lib)

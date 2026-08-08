@@ -14,19 +14,19 @@ elseif(WIN32)
 	)
 endif()
 
-add_library(renderEngine
+add_library(badlineRenderEngine
 	vulkanBackend.cpp
 	renderEngine.cpp
 	fontlessText.cpp
 	logs.cpp
 )
 
-setCompileOptions(renderEngine)
+setCompileOptions(badlineRenderEngine)
 
 add_library(vulkanAllocator vulkanAllocator.cpp)
 
 if (UNIX)
-	target_compile_options(renderEngine PRIVATE
+	target_compile_options(badlineRenderEngine PRIVATE
 		-Wno-nullability-extension
 		-Wno-nullability-completeness
 	)
@@ -44,5 +44,7 @@ set(renderEngineLibList
 	glfw
 )
 
-target_link_libraries(renderEngine ${renderEngineLibList})
+target_link_libraries(badlineRenderEngine ${renderEngineLibList})
 add_subdirectory(shaders)
+
+install(TARGETS badlineRenderEngine DESTINATION lib)

@@ -1,2 +1,4 @@
-add_library(argParser interface.cpp internals.cpp logs.cpp)
-setCompileOptions(argParser)
+add_library(badlineArgParser interface.cpp internals.cpp logs.cpp)
+setCompileOptions(badlineArgParser)
+
+install(TARGETS badlineArgParser DESTINATION lib)

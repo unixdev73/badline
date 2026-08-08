@@ -18,12 +18,13 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <vulkan/vulkan.h>
-#include <glm/glm.hpp>
+#include <badline/resources.hpp>
 #include <functional>
-#include <vector>
-#include <string>
+#include <glm/glm.hpp>
 #include <memory>
+#include <string>
+#include <vector>
+#include <vulkan/vulkan.h>
 
 #pragma once
 

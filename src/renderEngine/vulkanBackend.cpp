@@ -806,18 +806,18 @@ bool createDescriptorPoolAndLayouts(VulkanBackend *const backend) {
 
 bool createGraphicsPipeline(VulkanBackend *const backend) {
   CustomUniqPtr<VkShaderModule_T> vertex{}, fragment{}, fragNoSampler{};
-  if (!createShaderModule(backend, "shaders/vertex.spv", &vertex)) {
+  if (!createShaderModule(backend, getVertexShaderPath(), &vertex)) {
     addErrMsg(backend->logs, __func__, "Failed to create vertex shader");
     return false;
   }
 
-  if (!createShaderModule(backend, "shaders/fragment.spv", &fragment)) {
+  if (!createShaderModule(backend, getFragmentShaderPath(), &fragment)) {
     addErrMsg(backend->logs, __func__, "Failed to create fragment shader");
     return false;
   }
 
-  if (!createShaderModule(
-          backend, "shaders/fragNoSampler.spv", &fragNoSampler)) {
+  if (!createShaderModule(backend, getFragNoSamplerShaderPath(),
+                          &fragNoSampler)) {
     addErrMsg(
         backend->logs, __func__, "Failed to create fragment no sampler shader");
     return false;

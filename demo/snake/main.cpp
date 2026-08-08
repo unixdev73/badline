@@ -18,21 +18,20 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include <badline/vulkanBackend.hpp>
-#include <badline/renderEngine.hpp>
-#include <badline/argParser.hpp>
-#include <badline/vertexData.hpp>
 #include <GLFW/glfw3.h>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/glm.hpp>
+#include <array>
+#include <badline/argParser.hpp>
+#include <badline/renderEngine.hpp>
+#include <badline/vulkanBackend.hpp>
+#include <chrono>
 #include <filesystem>
 #include <functional>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
-#include <random>
-#include <memory>
-#include <chrono>
-#include <array>
 #include <list>
+#include <memory>
+#include <random>
 
 namespace demo {
 template <typename T>

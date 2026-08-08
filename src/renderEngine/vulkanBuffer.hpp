@@ -1,7 +1,8 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include "smartResource.hpp"
 #include "vk_mem_alloc.h"
+#include <vulkan/vulkan.h>
 
 namespace re {
 struct VulkanBuffer {

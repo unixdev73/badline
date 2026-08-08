@@ -1,0 +1,13 @@
+namespace re {
+inline const char* getVertexShaderPath() {
+  return "@BADLINE_SHADER_DESTINATION@/vertex.spv";
+}
+
+inline const char* getFragmentShaderPath() {
+  return "@BADLINE_SHADER_DESTINATION@/fragment.spv";
+}
+
+inline const char* getFragNoSamplerShaderPath() {
+  return "@BADLINE_SHADER_DESTINATION@/fragNoSampler.spv";
+}
+}

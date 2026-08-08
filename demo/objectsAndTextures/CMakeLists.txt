@@ -4,8 +4,8 @@ add_executable(objectsAndTextures
 setCompileOptions(objectsAndTextures)
 
 target_link_libraries(objectsAndTextures
-	argParser
-	renderEngine
+	badlineArgParser
+	badlineRenderEngine
 )
 
 if (UNIX)

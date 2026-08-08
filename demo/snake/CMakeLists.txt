@@ -4,8 +4,8 @@ add_executable(snake
 setCompileOptions(snake)
 
 target_link_libraries(snake
-	argParser
-	renderEngine
+	badlineArgParser
+	badlineRenderEngine
 )
 
 if (UNIX)

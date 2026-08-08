@@ -28,6 +28,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_BUILD_RPATH ${CMAKE_BUILD_RPATH} /usr/local/lib64)
 set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_RPATH} /usr/local/lib64)
 
+set(BADLINE_SHADER_DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/badlineShaders)
+
 function(setCompileOptions targetName)
 	if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 		if (UNIX)
@@ -68,6 +70,7 @@ endif()
 
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
+add_subdirectory(include)
 add_subdirectory(src)
 
 if (BUILD_TARGET_DOC)

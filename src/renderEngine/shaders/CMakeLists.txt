@@ -9,6 +9,7 @@ function(addShader targetName pathToSrc outputPath comment)
 	)
 
 	add_custom_target(${targetName} ALL DEPENDS ${outputPath})
+  install(FILES ${outputPath} DESTINATION ${BADLINE_SHADER_DESTINATION})
 endfunction()
 
 addShader(vertexShader

@@ -1,14 +1,14 @@
 add_executable(addArgParserFlag addArgParserFlag.cpp)
 setCompileOptions(addArgParserFlag)
-target_link_libraries(addArgParserFlag PRIVATE argParser)
+target_link_libraries(addArgParserFlag PRIVATE badlineArgParser)
 
 add_executable(addArgParserOpt addArgParserOpt.cpp)
 setCompileOptions(addArgParserOpt)
-target_link_libraries(addArgParserOpt PRIVATE argParser)
+target_link_libraries(addArgParserOpt PRIVATE badlineArgParser)
 
 add_executable(testArgParser testArgParser.cpp)
 setCompileOptions(testArgParser)
-target_link_libraries(testArgParser PRIVATE argParser)
+target_link_libraries(testArgParser PRIVATE badlineArgParser)
 
 # Adding new flag "longForm:shortForm"
 add_test(NAME addArgParserFlagTest1 COMMAND addArgParserFlag "abc:a")
