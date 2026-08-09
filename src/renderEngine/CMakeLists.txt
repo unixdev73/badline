@@ -15,6 +15,7 @@ elseif(WIN32)
 endif()
 
 add_library(badlineRenderEngine
+  vulkanAllocator.cpp
 	vulkanBackend.cpp
 	renderEngine.cpp
 	fontlessText.cpp
@@ -23,23 +24,12 @@ add_library(badlineRenderEngine
 
 setCompileOptions(badlineRenderEngine)
 
-add_library(vulkanAllocator vulkanAllocator.cpp)
-
 if (UNIX)
-	target_compile_options(badlineRenderEngine PRIVATE
-		-Wno-nullability-extension
-		-Wno-nullability-completeness
-	)
-
-	target_compile_options(vulkanAllocator PRIVATE
-		-Wno-nullability-extension
-		-Wno-nullability-completeness
-	)
+  target_compile_options(badlineRenderEngine PRIVATE -Wno-error)
 endif()
 
 set(renderEngineLibList
 	${Vulkan_LIBRARIES}
-	vulkanAllocator
 	${THREAD_LIBRARY}
 	glfw
 )
