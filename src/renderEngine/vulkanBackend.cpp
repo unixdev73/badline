@@ -2177,7 +2177,7 @@ bool createVulkanDevice(VulkanBackend *const handle) {
   info.ppEnabledExtensionNames = exts;
   info.enabledExtensionCount = sizeof(exts) / sizeof(exts[0]);
 
-  uint32_t count;
+  uint32_t count{};
   std::vector<VkPhysicalDevice> devices;
   auto const instance = handle->instance->handle.get();
   if (auto r = vkEnumeratePhysicalDevices(instance, &count, 0);
