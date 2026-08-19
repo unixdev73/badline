@@ -76,6 +76,11 @@ bool loadFromFile(Object *const handle, std::string const &path);
 
 bool setFontlessText(Object *const object, std::string const &text);
 
+bool setTextColor(Object *const object, float const r, float const g,
+                  float const b);
+
+glm::vec3 getTextSize(Object *const object);
+
 bool createTexture(VulkanBackend *const handle, Texture **const object);
 
 bool loadFromFile(Texture *const handle, std::string const &path);

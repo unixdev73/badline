@@ -19,11 +19,37 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include "object.hpp"
+#include <cassert>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace re {
+glm::vec3 getTextSize(Object *const object) {
+  assert(object);
+  assert(object->indices.size() > 1);
+
+  auto first = object->vertices.front().quad0;
+  auto second = object->vertices.back().quad0;
+  first.y = 0;
+  second.y = 14 + 1;
+  first.w = 1.f;
+  second.w = 1.f;
+
+  return second - first;
+}
+
+bool uploadObjectDataToGPU(Object *const handle);
+
+void setTextColor(Object *const object, float r, float g, float b) {
+  assert(object);
+
+  for (auto &v : object->vertices)
+    v.quad2 = glm::vec4{r, g, b, 1.f};
+
+  assert(uploadObjectDataToGPU(object));
+}
+
 void updateVerticesAndIndices(
     VertexData const &v1,
     VertexData const &v2,
