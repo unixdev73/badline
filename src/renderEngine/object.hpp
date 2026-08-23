@@ -67,6 +67,7 @@ struct Object {
   CustomUniqPtr<VkDescriptorSet_T> descriptorSet;
   VkPipelineLayout pipelineLayout{};
   VkPipeline pipeline{};
+  std::size_t count{};
 };
 
 struct ObjectInstance {

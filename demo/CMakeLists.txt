@@ -1,3 +1,4 @@
 add_subdirectory(objectsAndTextures)
 add_subdirectory(snake)
 add_subdirectory(networking)
+add_subdirectory(vulkanProjection)

@@ -24,60 +24,48 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #include <unordered_map>
 #include <vector>
 
+namespace {
+inline constexpr std::size_t getGridWidth() { return 8; }
+} // namespace
+
 namespace re {
 glm::vec3 getTextSize(Object *const object) {
   assert(object);
-  assert(object->indices.size() > 1);
-
-  auto first = object->vertices.front().quad0;
-  auto second = object->vertices.back().quad0;
-  first.y = 0;
-  second.y = 14 + 1;
-  first.w = 1.f;
-  second.w = 1.f;
-
-  return second - first;
+  if (!object->count)
+    return {};
+  return {object->count * getGridWidth() - 1, 15.f, 0.f};
 }
 
 bool uploadObjectDataToGPU(Object *const handle);
 
-void setTextColor(Object *const object, float r, float g, float b) {
+void setTextColor(Object *const object, float const r, float const g,
+                  float const b, float const a) {
   assert(object);
 
   for (auto &v : object->vertices)
-    v.quad2 = glm::vec4{r, g, b, 1.f};
+    v.quad2 = glm::vec4{r, g, b, a};
 
   assert(uploadObjectDataToGPU(object));
 }
 
 void updateVerticesAndIndices(
-    VertexData const &v1,
-    VertexData const &v2,
-    VertexData const &v3,
-    std::vector<VertexData> &vertices,
-    std::vector<uint32_t> &indices,
+    VertexData const &v1, VertexData const &v2, VertexData const &v3,
+    std::vector<VertexData> &vertices, std::vector<uint32_t> &indices,
     std::unordered_map<VertexData, std::size_t> &indexMap) {
 
-  if (!indexMap.contains(v1)) {
-    vertices.push_back(std::move(v1));
-    indices.push_back(vertices.size() - 1);
-    indexMap.emplace(v1, indices.back());
-  } else
-    indices.push_back(indexMap.at(v1));
+#define MCR_INSERT(vertex)                                                     \
+  if (!indexMap.contains(vertex)) {                                            \
+    vertices.push_back(std::move(vertex));                                     \
+    indices.push_back(vertices.size() - 1);                                    \
+    indexMap.emplace(vertex, indices.back());                                  \
+  } else                                                                       \
+    indices.push_back(indexMap.at(vertex));
 
-  if (!indexMap.contains(v2)) {
-    vertices.push_back(std::move(v2));
-    indices.push_back(vertices.size() - 1);
-    indexMap.emplace(v2, indices.back());
-  } else
-    indices.push_back(indexMap.at(v2));
+  MCR_INSERT(v1);
+  MCR_INSERT(v2);
+  MCR_INSERT(v3);
 
-  if (!indexMap.contains(v3)) {
-    vertices.push_back(std::move(v3));
-    indices.push_back(vertices.size() - 1);
-    indexMap.emplace(v3, indices.back());
-  } else
-    indices.push_back(indexMap.at(v3));
+#undef MCR_INSERT
 }
 
 /*    -----
@@ -85,22 +73,19 @@ void updateVerticesAndIndices(
  *    | /
  *    |/
  */
-void mktl(glm::vec3 const &offset,
-          float const x,
-          float const y,
-          std::vector<VertexData> &vertices,
-          std::vector<uint32_t> &indices,
+void mktl(glm::vec3 const &offset, float const x, float const y,
+          std::vector<VertexData> &vertices, std::vector<uint32_t> &indices,
           std::unordered_map<VertexData, std::size_t> &indexMap) {
   VertexData v1{}, v2{}, v3{};
 
   v1.quad0.x = offset.x + x;
   v1.quad0.y = offset.y - y;
 
-  v2.quad0.x = offset.x + (x + 1);
-  v2.quad0.y = v1.quad0.y;
+  v2.quad0.x = v1.quad0.x;
+  v2.quad0.y = offset.y - (y + 1);
 
-  v3.quad0.x = v1.quad0.x;
-  v3.quad0.y = offset.y - (y + 1);
+  v3.quad0.x = offset.x + (x + 1);
+  v3.quad0.y = v1.quad0.y;
 
   updateVerticesAndIndices(v1, v2, v3, vertices, indices, indexMap);
 }
@@ -110,11 +95,8 @@ void mktl(glm::vec3 const &offset,
  *      \ |
  *       \|
  */
-void mktr(glm::vec3 const &offset,
-          float const x,
-          float const y,
-          std::vector<VertexData> &vertices,
-          std::vector<uint32_t> &indices,
+void mktr(glm::vec3 const &offset, float const x, float const y,
+          std::vector<VertexData> &vertices, std::vector<uint32_t> &indices,
           std::unordered_map<VertexData, std::size_t> &indexMap) {
   VertexData v1{}, v2{}, v3{};
 
@@ -135,22 +117,19 @@ void mktr(glm::vec3 const &offset,
  *    |  \
  *    -----
  */
-void mkbl(glm::vec3 const &offset,
-          float const x,
-          float const y,
-          std::vector<VertexData> &vertices,
-          std::vector<uint32_t> &indices,
+void mkbl(glm::vec3 const &offset, float const x, float const y,
+          std::vector<VertexData> &vertices, std::vector<uint32_t> &indices,
           std::unordered_map<VertexData, std::size_t> &indexMap) {
   VertexData v1{}, v2{}, v3{};
 
   v1.quad0.x = offset.x + x;
   v1.quad0.y = offset.y - y;
 
-  v2.quad0.x = offset.x + (x + 1);
-  v2.quad0.y = offset.y - (y + 1);
+  v3.quad0.x = offset.x + (x + 1);
+  v3.quad0.y = offset.y - (y + 1);
 
-  v3.quad0.x = v1.quad0.x;
-  v3.quad0.y = v2.quad0.y;
+  v2.quad0.x = v1.quad0.x;
+  v2.quad0.y = v3.quad0.y;
 
   updateVerticesAndIndices(v1, v2, v3, vertices, indices, indexMap);
 }
@@ -160,22 +139,19 @@ void mkbl(glm::vec3 const &offset,
  *     /  |
  *    -----
  */
-void mkbr(glm::vec3 const &offset,
-          float const x,
-          float const y,
-          std::vector<VertexData> &vertices,
-          std::vector<uint32_t> &indices,
+void mkbr(glm::vec3 const &offset, float const x, float const y,
+          std::vector<VertexData> &vertices, std::vector<uint32_t> &indices,
           std::unordered_map<VertexData, std::size_t> &indexMap) {
   VertexData v1{}, v2{}, v3{};
 
   v1.quad0.x = offset.x + (x + 1);
   v1.quad0.y = offset.y - y;
 
-  v2.quad0.x = offset.x + (x + 1);
-  v2.quad0.y = offset.y - (y + 1);
+  v3.quad0.x = offset.x + (x + 1);
+  v3.quad0.y = offset.y - (y + 1);
 
-  v3.quad0.x = offset.x + x;
-  v3.quad0.y = v2.quad0.y;
+  v2.quad0.x = offset.x + x;
+  v2.quad0.y = v3.quad0.y;
 
   updateVerticesAndIndices(v1, v2, v3, vertices, indices, indexMap);
 }
@@ -185,18 +161,14 @@ void mkbr(glm::vec3 const &offset,
  *    |   |
  *    -----
  */
-void mksq(glm::vec3 const &offset,
-          float const x,
-          float const y,
-          std::vector<VertexData> &vertices,
-          std::vector<uint32_t> &indices,
+void mksq(glm::vec3 const &offset, float const x, float const y,
+          std::vector<VertexData> &vertices, std::vector<uint32_t> &indices,
           std::unordered_map<VertexData, std::size_t> &indexMap) {
   mktl(offset, x, y, vertices, indices, indexMap);
   mkbr(offset, x, y, vertices, indices, indexMap);
 }
 
-void addA(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addA(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -250,8 +222,7 @@ void addA(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addB(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addB(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -313,8 +284,7 @@ void addB(glm::vec3 const &offset,
   mksq(offset, 6, 13, vertices, indices, indexMap);
 }
 
-void addC(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addC(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -352,8 +322,7 @@ void addC(glm::vec3 const &offset,
   mktl(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addD(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addD(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -406,8 +375,7 @@ void addD(glm::vec3 const &offset,
   mksq(offset, 6, 13, vertices, indices, indexMap);
 }
 
-void addE(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addE(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -454,8 +422,7 @@ void addE(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addF(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addF(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -494,8 +461,7 @@ void addF(glm::vec3 const &offset,
   mksq(offset, 6, 7, vertices, indices, indexMap);
 }
 
-void addG(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addG(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -545,8 +511,7 @@ void addG(glm::vec3 const &offset,
   mktl(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addH(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addH(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -593,8 +558,7 @@ void addH(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addI(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addI(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -632,8 +596,7 @@ void addI(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addJ(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addJ(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -665,8 +628,7 @@ void addJ(glm::vec3 const &offset,
   mksq(offset, 0, 12, vertices, indices, indexMap);
 }
 
-void addK(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addK(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -718,8 +680,7 @@ void addK(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addL(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addL(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -748,8 +709,7 @@ void addL(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addM(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addM(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -807,8 +767,7 @@ void addM(glm::vec3 const &offset,
   mksq(offset, 3, 5, vertices, indices, indexMap);
 }
 
-void addN(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addN(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -866,8 +825,7 @@ void addN(glm::vec3 const &offset,
   mksq(offset, 5, 12, vertices, indices, indexMap);
 }
 
-void addO(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addO(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -917,8 +875,7 @@ void addO(glm::vec3 const &offset,
   mksq(offset, 5, 14, vertices, indices, indexMap);
 }
 
-void addP(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addP(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -965,8 +922,7 @@ void addP(glm::vec3 const &offset,
   mksq(offset, 6, 6, vertices, indices, indexMap);
 }
 
-void addQ(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addQ(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1028,8 +984,7 @@ void addQ(glm::vec3 const &offset,
   mktr(offset, 4, 13, vertices, indices, indexMap);
 }
 
-void addR(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addR(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1084,8 +1039,7 @@ void addR(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addS(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addS(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1130,8 +1084,7 @@ void addS(glm::vec3 const &offset,
   mktl(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addT(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addT(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1160,8 +1113,7 @@ void addT(glm::vec3 const &offset,
   mksq(offset, 3, 14, vertices, indices, indexMap);
 }
 
-void addU(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addU(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1205,8 +1157,7 @@ void addU(glm::vec3 const &offset,
   mksq(offset, 5, 14, vertices, indices, indexMap);
 }
 
-void addV(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addV(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1248,8 +1199,7 @@ void addV(glm::vec3 const &offset,
   mksq(offset, 0, 0, vertices, indices, indexMap);
 }
 
-void addW(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addW(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1306,8 +1256,7 @@ void addW(glm::vec3 const &offset,
   mktl(offset, 3, 14, vertices, indices, indexMap);
 }
 
-void addX(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addX(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1354,8 +1303,7 @@ void addX(glm::vec3 const &offset,
   mksq(offset, 6, 0, vertices, indices, indexMap);
 }
 
-void addY(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addY(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1391,8 +1339,7 @@ void addY(glm::vec3 const &offset,
   mksq(offset, 3, 14, vertices, indices, indexMap);
 }
 
-void addZ(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void addZ(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1436,8 +1383,7 @@ void addZ(glm::vec3 const &offset,
   mksq(offset, 6, 0, vertices, indices, indexMap);
 }
 
-void add0(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void add0(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1487,8 +1433,7 @@ void add0(glm::vec3 const &offset,
   mksq(offset, 5, 14, vertices, indices, indexMap);
 }
 
-void add1(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void add1(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1527,8 +1472,7 @@ void add1(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void add2(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void add2(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1571,8 +1515,7 @@ void add2(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void add3(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void add3(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1616,8 +1559,7 @@ void add3(glm::vec3 const &offset,
   mksq(offset, 6, 13, vertices, indices, indexMap);
 }
 
-void add4(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void add4(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1656,8 +1598,7 @@ void add4(glm::vec3 const &offset,
   mksq(offset, 6, 7, vertices, indices, indexMap);
 }
 
-void add5(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void add5(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1702,91 +1643,7 @@ void add5(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void add6(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
-          std::vector<uint32_t> &indices) {
-
-  std::unordered_map<VertexData, std::size_t> indexMap;
-
-  mksq(offset, 0, 0, vertices, indices, indexMap);
-  mksq(offset, 1, 0, vertices, indices, indexMap);
-  mksq(offset, 2, 0, vertices, indices, indexMap);
-  mksq(offset, 3, 0, vertices, indices, indexMap);
-  mksq(offset, 4, 0, vertices, indices, indexMap);
-  mksq(offset, 5, 0, vertices, indices, indexMap);
-  mksq(offset, 6, 0, vertices, indices, indexMap);
-
-  mksq(offset, 0, 1, vertices, indices, indexMap);
-  mksq(offset, 0, 2, vertices, indices, indexMap);
-  mksq(offset, 0, 3, vertices, indices, indexMap);
-  mksq(offset, 0, 4, vertices, indices, indexMap);
-  mksq(offset, 0, 5, vertices, indices, indexMap);
-  mksq(offset, 0, 6, vertices, indices, indexMap);
-  mksq(offset, 0, 7, vertices, indices, indexMap);
-  mksq(offset, 0, 8, vertices, indices, indexMap);
-  mksq(offset, 0, 9, vertices, indices, indexMap);
-  mksq(offset, 0, 10, vertices, indices, indexMap);
-  mksq(offset, 0, 11, vertices, indices, indexMap);
-  mksq(offset, 0, 12, vertices, indices, indexMap);
-  mksq(offset, 0, 13, vertices, indices, indexMap);
-  mksq(offset, 0, 14, vertices, indices, indexMap);
-
-  mksq(offset, 1, 7, vertices, indices, indexMap);
-  mksq(offset, 2, 7, vertices, indices, indexMap);
-  mksq(offset, 3, 7, vertices, indices, indexMap);
-  mksq(offset, 4, 7, vertices, indices, indexMap);
-  mksq(offset, 5, 7, vertices, indices, indexMap);
-  mksq(offset, 6, 7, vertices, indices, indexMap);
-
-  mksq(offset, 6, 8, vertices, indices, indexMap);
-  mksq(offset, 6, 9, vertices, indices, indexMap);
-  mksq(offset, 6, 10, vertices, indices, indexMap);
-  mksq(offset, 6, 11, vertices, indices, indexMap);
-  mksq(offset, 6, 12, vertices, indices, indexMap);
-  mksq(offset, 6, 13, vertices, indices, indexMap);
-  mksq(offset, 6, 14, vertices, indices, indexMap);
-
-  mksq(offset, 0, 14, vertices, indices, indexMap);
-  mksq(offset, 1, 14, vertices, indices, indexMap);
-  mksq(offset, 2, 14, vertices, indices, indexMap);
-  mksq(offset, 3, 14, vertices, indices, indexMap);
-  mksq(offset, 4, 14, vertices, indices, indexMap);
-  mksq(offset, 5, 14, vertices, indices, indexMap);
-  mksq(offset, 6, 14, vertices, indices, indexMap);
-}
-
-void add7(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
-          std::vector<uint32_t> &indices) {
-
-  std::unordered_map<VertexData, std::size_t> indexMap;
-
-  mksq(offset, 0, 0, vertices, indices, indexMap);
-  mksq(offset, 1, 0, vertices, indices, indexMap);
-  mksq(offset, 2, 0, vertices, indices, indexMap);
-  mksq(offset, 3, 0, vertices, indices, indexMap);
-  mksq(offset, 4, 0, vertices, indices, indexMap);
-  mksq(offset, 5, 0, vertices, indices, indexMap);
-  mksq(offset, 6, 0, vertices, indices, indexMap);
-
-  mksq(offset, 6, 1, vertices, indices, indexMap);
-  mksq(offset, 6, 2, vertices, indices, indexMap);
-  mksq(offset, 6, 3, vertices, indices, indexMap);
-  mksq(offset, 6, 4, vertices, indices, indexMap);
-  mksq(offset, 6, 5, vertices, indices, indexMap);
-  mksq(offset, 6, 6, vertices, indices, indexMap);
-  mksq(offset, 6, 7, vertices, indices, indexMap);
-  mksq(offset, 6, 8, vertices, indices, indexMap);
-  mksq(offset, 6, 9, vertices, indices, indexMap);
-  mksq(offset, 6, 10, vertices, indices, indexMap);
-  mksq(offset, 6, 11, vertices, indices, indexMap);
-  mksq(offset, 6, 12, vertices, indices, indexMap);
-  mksq(offset, 6, 13, vertices, indices, indexMap);
-  mksq(offset, 6, 14, vertices, indices, indexMap);
-}
-
-void add8(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void add6(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1821,6 +1678,87 @@ void add8(glm::vec3 const &offset,
   mksq(offset, 5, 7, vertices, indices, indexMap);
   mksq(offset, 6, 7, vertices, indices, indexMap);
 
+  mksq(offset, 6, 8, vertices, indices, indexMap);
+  mksq(offset, 6, 9, vertices, indices, indexMap);
+  mksq(offset, 6, 10, vertices, indices, indexMap);
+  mksq(offset, 6, 11, vertices, indices, indexMap);
+  mksq(offset, 6, 12, vertices, indices, indexMap);
+  mksq(offset, 6, 13, vertices, indices, indexMap);
+  mksq(offset, 6, 14, vertices, indices, indexMap);
+
+  mksq(offset, 0, 14, vertices, indices, indexMap);
+  mksq(offset, 1, 14, vertices, indices, indexMap);
+  mksq(offset, 2, 14, vertices, indices, indexMap);
+  mksq(offset, 3, 14, vertices, indices, indexMap);
+  mksq(offset, 4, 14, vertices, indices, indexMap);
+  mksq(offset, 5, 14, vertices, indices, indexMap);
+  mksq(offset, 6, 14, vertices, indices, indexMap);
+}
+
+void add7(glm::vec3 const &offset, std::vector<VertexData> &vertices,
+          std::vector<uint32_t> &indices) {
+
+  std::unordered_map<VertexData, std::size_t> indexMap;
+
+  mksq(offset, 0, 0, vertices, indices, indexMap);
+  mksq(offset, 1, 0, vertices, indices, indexMap);
+  mksq(offset, 2, 0, vertices, indices, indexMap);
+  mksq(offset, 3, 0, vertices, indices, indexMap);
+  mksq(offset, 4, 0, vertices, indices, indexMap);
+  mksq(offset, 5, 0, vertices, indices, indexMap);
+  mksq(offset, 6, 0, vertices, indices, indexMap);
+
+  mksq(offset, 6, 1, vertices, indices, indexMap);
+  mksq(offset, 6, 2, vertices, indices, indexMap);
+  mksq(offset, 6, 3, vertices, indices, indexMap);
+  mksq(offset, 6, 4, vertices, indices, indexMap);
+  mksq(offset, 6, 5, vertices, indices, indexMap);
+  mksq(offset, 6, 6, vertices, indices, indexMap);
+  mksq(offset, 6, 7, vertices, indices, indexMap);
+  mksq(offset, 6, 8, vertices, indices, indexMap);
+  mksq(offset, 6, 9, vertices, indices, indexMap);
+  mksq(offset, 6, 10, vertices, indices, indexMap);
+  mksq(offset, 6, 11, vertices, indices, indexMap);
+  mksq(offset, 6, 12, vertices, indices, indexMap);
+  mksq(offset, 6, 13, vertices, indices, indexMap);
+  mksq(offset, 6, 14, vertices, indices, indexMap);
+}
+
+void add8(glm::vec3 const &offset, std::vector<VertexData> &vertices,
+          std::vector<uint32_t> &indices) {
+
+  std::unordered_map<VertexData, std::size_t> indexMap;
+
+  mksq(offset, 0, 0, vertices, indices, indexMap);
+  mksq(offset, 1, 0, vertices, indices, indexMap);
+  mksq(offset, 2, 0, vertices, indices, indexMap);
+  mksq(offset, 3, 0, vertices, indices, indexMap);
+  mksq(offset, 4, 0, vertices, indices, indexMap);
+  mksq(offset, 5, 0, vertices, indices, indexMap);
+  mksq(offset, 6, 0, vertices, indices, indexMap);
+
+  mksq(offset, 0, 1, vertices, indices, indexMap);
+  mksq(offset, 0, 2, vertices, indices, indexMap);
+  mksq(offset, 0, 3, vertices, indices, indexMap);
+  mksq(offset, 0, 4, vertices, indices, indexMap);
+  mksq(offset, 0, 5, vertices, indices, indexMap);
+  mksq(offset, 0, 6, vertices, indices, indexMap);
+  mksq(offset, 0, 7, vertices, indices, indexMap);
+  mksq(offset, 0, 8, vertices, indices, indexMap);
+  mksq(offset, 0, 9, vertices, indices, indexMap);
+  mksq(offset, 0, 10, vertices, indices, indexMap);
+  mksq(offset, 0, 11, vertices, indices, indexMap);
+  mksq(offset, 0, 12, vertices, indices, indexMap);
+  mksq(offset, 0, 13, vertices, indices, indexMap);
+  mksq(offset, 0, 14, vertices, indices, indexMap);
+
+  mksq(offset, 1, 7, vertices, indices, indexMap);
+  mksq(offset, 2, 7, vertices, indices, indexMap);
+  mksq(offset, 3, 7, vertices, indices, indexMap);
+  mksq(offset, 4, 7, vertices, indices, indexMap);
+  mksq(offset, 5, 7, vertices, indices, indexMap);
+  mksq(offset, 6, 7, vertices, indices, indexMap);
+
   mksq(offset, 6, 1, vertices, indices, indexMap);
   mksq(offset, 6, 2, vertices, indices, indexMap);
   mksq(offset, 6, 3, vertices, indices, indexMap);
@@ -1845,8 +1783,7 @@ void add8(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void add9(glm::vec3 const &offset,
-          std::vector<VertexData> &vertices,
+void add9(glm::vec3 const &offset, std::vector<VertexData> &vertices,
           std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1898,8 +1835,7 @@ void add9(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addColon(glm::vec3 const &offset,
-              std::vector<VertexData> &vertices,
+void addColon(glm::vec3 const &offset, std::vector<VertexData> &vertices,
               std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1910,8 +1846,7 @@ void addColon(glm::vec3 const &offset,
   mksq(offset, 3, 9, vertices, indices, indexMap);
 }
 
-void addMinus(glm::vec3 const &offset,
-              std::vector<VertexData> &vertices,
+void addMinus(glm::vec3 const &offset, std::vector<VertexData> &vertices,
               std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1925,8 +1860,7 @@ void addMinus(glm::vec3 const &offset,
   mksq(offset, 6, 7, vertices, indices, indexMap);
 }
 
-void addPlus(glm::vec3 const &offset,
-             std::vector<VertexData> &vertices,
+void addPlus(glm::vec3 const &offset, std::vector<VertexData> &vertices,
              std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1948,8 +1882,7 @@ void addPlus(glm::vec3 const &offset,
   mksq(offset, 3, 10, vertices, indices, indexMap);
 }
 
-void addEq(glm::vec3 const &offset,
-           std::vector<VertexData> &vertices,
+void addEq(glm::vec3 const &offset, std::vector<VertexData> &vertices,
            std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1971,8 +1904,7 @@ void addEq(glm::vec3 const &offset,
   mksq(offset, 6, 8, vertices, indices, indexMap);
 }
 
-void addUnderscore(glm::vec3 const &offset,
-                   std::vector<VertexData> &vertices,
+void addUnderscore(glm::vec3 const &offset, std::vector<VertexData> &vertices,
                    std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1986,8 +1918,7 @@ void addUnderscore(glm::vec3 const &offset,
   mksq(offset, 6, 14, vertices, indices, indexMap);
 }
 
-void addDot(glm::vec3 const &offset,
-            std::vector<VertexData> &vertices,
+void addDot(glm::vec3 const &offset, std::vector<VertexData> &vertices,
             std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -1998,8 +1929,7 @@ void addDot(glm::vec3 const &offset,
   mksq(offset, 4, 14, vertices, indices, indexMap);
 }
 
-void addEx(glm::vec3 const &offset,
-           std::vector<VertexData> &vertices,
+void addEx(glm::vec3 const &offset, std::vector<VertexData> &vertices,
            std::vector<uint32_t> &indices) {
 
   std::unordered_map<VertexData, std::size_t> indexMap;
@@ -2022,15 +1952,14 @@ void addEx(glm::vec3 const &offset,
 
 struct Object;
 
-bool loadFromRAM(Object *const handle,
-                 std::vector<VertexData> vertices,
+bool loadFromRAM(Object *const handle, std::vector<VertexData> vertices,
                  std::vector<uint32_t> indices);
 
-bool setFontlessText(Object *const object,
-                     std::string const &text) {
+bool setFontlessText(Object *const object, std::string const &text,
+                     float const r, float const g, float const b,
+                     float const a) {
 
-  constexpr std::size_t size = 256, gridWidth = 7;
-  constexpr float spacing = 1.f;
+  constexpr std::size_t size = 256, gridWidth = getGridWidth();
 
   typedef void (*createSig)(glm::vec3 const &offset,
                             std::vector<VertexData> &vertices,
@@ -2095,15 +2024,19 @@ bool setFontlessText(Object *const object,
   std::vector<VertexData> vertices;
   std::vector<uint32_t> indices;
   glm::vec3 offset{};
+  object->count = text.size();
 
   for (std::size_t i = 0; i < text.size(); ++i) {
     auto createFunc = dispatch[(std::size_t)text[i]];
     if (createFunc || text[i] == ' ') {
       if (createFunc)
         createFunc(offset, vertices, indices);
-      offset.x += gridWidth + spacing;
+      offset.x += getGridWidth();
     }
   }
+
+  for (auto &v : vertices)
+    v.quad2 = glm::vec4{r, g, b, a};
 
   return loadFromRAM(object, std::move(vertices), std::move(indices));
 }

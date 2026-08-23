@@ -1,0 +1,2 @@
+add_executable(projTest main.cpp)
+target_link_libraries(projTest badlineRenderEngine badlineArgParser)

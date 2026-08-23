@@ -196,10 +196,10 @@ bool initializeUI(AppData *const a) {
     return false;
   }
 
-  a->textModel = glm::translate(glm::mat4{1}, glm::vec3(50.f, -10.f, 0.f)) *
-                 glm::scale(glm::mat4{1}, glm::vec3(5.f, 5.f, 0.f));
+  a->textModel = glm::translate({1}, glm::vec3(10.f, -10.f, 0.f)) *
+                 glm::scale(glm::mat4{1.f}, glm::vec3{6.f, 6.f, 1.f});
 
-  if (!setFontlessText(a->text1, "SCORE = 0")) {
+  if (!setFontlessText(a->text1, "SCORE = 0", 0, 0, 0, 1.f)) {
     std::cerr << "ERROR: Failed to set fontless text" << std::endl;
     return false;
   }
@@ -215,8 +215,7 @@ bool initializeScene(AppData *const a) {
                                   -2 * float(a->cubeSide),
                                   2 * float(a->cubeSide));
 
-  a->view = glm::lookAt(glm::vec3{0, 0, -float(a->cubeSide) / 2.f},
-                        glm::vec3{0, 0, 0},
+  a->view = glm::lookAt(glm::vec3{0, 0, -10}, glm::vec3{0, 0, 0},
                         glm::vec3{0, -1.f, 0});
 
   if (!createCube(a, a->trump, &a->cube))

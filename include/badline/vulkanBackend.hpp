@@ -74,10 +74,12 @@ bool uploadObjectDataToGPU(Object *const handle);
 
 bool loadFromFile(Object *const handle, std::string const &path);
 
-bool setFontlessText(Object *const object, std::string const &text);
+bool setFontlessText(Object *const object, std::string const &text,
+                     float const r = 0, float const g = 0, float const b = 0,
+                     float const a = 1.f);
 
 bool setTextColor(Object *const object, float const r, float const g,
-                  float const b);
+                  float const b, float const a = 1.f);
 
 glm::vec3 getTextSize(Object *const object);
 
