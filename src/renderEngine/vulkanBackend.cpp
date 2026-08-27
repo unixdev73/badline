@@ -1627,6 +1627,24 @@ bool loadFromFile(Object *const handle, std::string const &p) {
   return true;
 }
 
+bool destroyObject(Object *const obj) {
+  if (!obj)
+    return false;
+
+  auto vk = obj->backend;
+  if (!vk)
+    return false;
+
+  for (auto it = vk->objects.begin(); it != vk->objects.end(); ++it) {
+    if (it->get() == obj) {
+      vk->objects.erase(it);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 bool createObject(VulkanBackend *const handle,
                   Texture const *const t,
                   Object **const p) {

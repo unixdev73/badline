@@ -62,6 +62,8 @@ bool createObject(VulkanBackend *const handle,
                   Texture const *const t,
                   Object **const object);
 
+bool destroyObject(Object *const obj);
+
 bool addVertex(Object *const handle,
                glm::vec3 const &position,
                glm::vec2 const &texCoord,
