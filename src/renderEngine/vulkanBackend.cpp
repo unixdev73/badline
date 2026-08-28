@@ -1637,6 +1637,7 @@ bool destroyObject(Object *const obj) {
 
   for (auto it = vk->objects.begin(); it != vk->objects.end(); ++it) {
     if (it->get() == obj) {
+      vkDeviceWaitIdle(obj->backend->device->handle.get());
       vk->objects.erase(it);
       return true;
     }
