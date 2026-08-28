@@ -82,6 +82,7 @@ std::string const &getActiveInterface(Endpoint *const);
 
 std::vector<in_addr> getInterfaceAddressesIPv4(std::string const &ifc);
 std::string getLoopbackInterface();
+std::vector<std::string> getInterfacesWithIPv4();
 
 #ifdef MCR_UNIX
 std::vector<in6_addr> getInterfaceAddressesIPv6(std::string const &interface);

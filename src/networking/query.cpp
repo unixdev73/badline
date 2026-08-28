@@ -65,6 +65,22 @@ std::vector<in_addr> getInterfaceAddressesIPv4(std::string const &ifc) {
   return out;
 }
 
+std::vector<std::string> getInterfacesWithIPv4() {
+  std::vector<std::string> out{};
+  ifaddrs *info{};
+
+  if (getifaddrs(&info))
+    return {};
+
+  for (auto entry = info; entry; entry = entry->ifa_next)
+    if (entry->ifa_addr && entry->ifa_addr->sa_family == AF_INET)
+      out.push_back(entry->ifa_name);
+
+  freeifaddrs(info);
+
+  return out;
+}
+
 std::vector<in6_addr> getInterfaceAddressesIPv6(std::string const &ifc) {
   assert(ifc.size() > 1);
   std::vector<in6_addr> out{};
@@ -154,6 +170,36 @@ std::vector<unsigned char> getAdaptersBuffer() {
   }
 
   return buffer;
+}
+
+std::vector<std::string> getInterfacesWithIPv4() {
+  std::vector<std::string> out;
+  auto buffer = getAdaptersBuffer();
+  if (buffer.empty())
+    return {};
+
+  auto *adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buffer.data());
+
+  for (auto *adapter = adapters; adapter; adapter = adapter->Next) {
+    if (!adapter->AdapterName)
+      continue;
+
+    for (auto *address = adapter->FirstUnicastAddress; address;
+         address = address->Next) {
+
+      if (!address->Address.lpSockaddr ||
+          address->Address.lpSockaddr->sa_family != AF_INET) {
+        continue;
+      }
+
+      auto *addr = reinterpret_cast<sockaddr_in *>(address->Address.lpSockaddr);
+
+      if (addr->sin_addr.s_addr)
+        out.push_back(wideToUtf8(adapter->FriendlyName));
+    }
+  }
+
+  return out;
 }
 
 std::string getLoopbackInterface() {
