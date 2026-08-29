@@ -38,6 +38,7 @@ struct BLOM_ServerEndpoint {
   char *tcpInDataStorage{};
   int *tcpInDataSizes{};
   int tcpActiveClient{};
+  unsigned clientCount{};
 };
 
 struct BLOM_ClientEndpoint {
@@ -48,6 +49,7 @@ struct BLOM_ClientEndpoint {
 
   int tcpSocket{-1};        // Sender
   in_addr tcpDestination{}; // Server address
+  bool isConnected{};
 };
 
 struct BLOM_Endpoint {

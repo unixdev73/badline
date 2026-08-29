@@ -129,6 +129,7 @@ void blomReceive(Endpoint *const handle, void *const data, int *const size) {
       }
       assert(fd != -1);
       setNonblocking(fd);
+      ++serv->clientCount;
     }
 
     auto dst =
@@ -249,6 +250,7 @@ bool blomConnect(Endpoint *const handle) {
   assert(result > -1);
 
   client->tcpDestination = info.address;
+  client->isConnected = true;
   return true;
 }
 
@@ -472,5 +474,33 @@ std::string to_string(BLOM_Type const blomType) {
   }
 
   return "";
+}
+
+bool blomGetConnectedUsers(Endpoint *const handle, unsigned *userCount) {
+  assert(handle);
+  assert(userCount);
+
+  if (!(handle->flags & ENDPOINT_CREATION_FLAGS_PROTOCOL_BLOM))
+    return false;
+
+  if (!(handle->flags & ENDPOINT_CREATION_FLAGS_USAGE_SERVER))
+    return false;
+
+  *userCount = handle->blom.server.clientCount;
+  return true;
+}
+
+bool blomIsConnected(Endpoint *const handle, bool *isConnected) {
+  assert(handle);
+  assert(isConnected);
+
+  if (!(handle->flags & ENDPOINT_CREATION_FLAGS_PROTOCOL_BLOM))
+    return false;
+
+  if (!(handle->flags & ENDPOINT_CREATION_FLAGS_USAGE_CLIENT))
+    return false;
+
+  *isConnected = handle->blom.client.isConnected;
+  return true;
 }
 } // namespace ne

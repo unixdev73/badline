@@ -93,4 +93,7 @@ bool blomConnect(Endpoint *const handle);
 
 void blomSend(Endpoint *const handle, void *const data, int const size);
 void blomReceive(Endpoint *const handle, void *const data, int *const size);
+
+bool blomGetConnectedUsers(Endpoint *const handle, unsigned *userCount);
+bool blomIsConnected(Endpoint *const handle, bool *isConnected);
 }
