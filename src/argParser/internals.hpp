@@ -166,6 +166,7 @@ struct ArgParser {
   std::vector<ArgInstanceInfo> *targetOption{};
   std::size_t errorPosition{};
   bool databaseFilled{false};
+  bool customAlloc{};
 };
 } // namespace ap
 

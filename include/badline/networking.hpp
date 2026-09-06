@@ -20,6 +20,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -96,4 +97,7 @@ void blomReceive(Endpoint *const handle, void *const data, int *const size);
 
 bool blomGetConnectedUsers(Endpoint *const handle, unsigned *userCount);
 bool blomIsConnected(Endpoint *const handle, bool *isConnected);
+
+std::size_t getSizeOfEndpoint();
+std::size_t getAlignOfEndpoint();
 }

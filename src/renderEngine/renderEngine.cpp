@@ -26,7 +26,12 @@ namespace re {
 struct RenderEngine {
   mutable CustomUniqPtr<Logs> logs;
   CustomUniqPtr<VulkanBackend> vulkanBackend;
+  bool customAlloc{};
 };
+
+std::size_t getSizeOfRenderEngine() { return sizeof(RenderEngine); }
+
+std::size_t getAlignOfRenderEngine() { return alignof(RenderEngine); }
 
 void create(RenderEngine **const handle) {
   if (!handle)
@@ -38,12 +43,19 @@ void create(RenderEngine **const handle) {
     return;
   CustomUniqPtr<Logs> logs{ptr, [](auto *const p) { destroy(p); }};
 
-  *handle = new RenderEngine{};
+  if (!*handle)
+    *handle = new RenderEngine{};
+  else
+    (*handle)->customAlloc = true;
+
   if (*handle)
     (*handle)->logs = std::move(logs);
 }
 
-void destroy(RenderEngine *const handle) { delete handle; }
+void destroy(RenderEngine *const handle) {
+  if (handle && !handle->customAlloc)
+    delete handle;
+}
 
 void create(Logs *const l, VulkanBackend **const handle);
 

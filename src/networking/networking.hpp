@@ -65,6 +65,7 @@ struct Endpoint {
   in_addr activeAddress{};
   std::size_t flags{};
   int port{};
+  bool customAlloc{};
 
   // Protocol-specific data
   union {

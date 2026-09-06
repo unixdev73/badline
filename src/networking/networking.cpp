@@ -407,8 +407,13 @@ bool create(Endpoint **const handle, std::string const &ifc, int const port,
   }
 #endif
 
-  auto guard = std::unique_ptr<Endpoint, void (*)(Endpoint *const)>{
-      new Endpoint{}, destroy};
+  if (!*handle)
+    *handle = new Endpoint{};
+  else
+    (*handle)->customAlloc = true;
+
+  auto guard =
+      std::unique_ptr<Endpoint, void (*)(Endpoint *const)>{*handle, destroy};
   if (!guard)
     return false;
   guard->flags = flags;
@@ -431,6 +436,10 @@ bool create(Endpoint **const handle, std::string const &ifc, int const port,
   *handle = guard.release();
   return true;
 }
+
+std::size_t getSizeOfEndpoint() { return sizeof(Endpoint); }
+
+std::size_t getAlignOfEndpoint() { return alignof(Endpoint); }
 
 void destroy(Endpoint *const handle) {
   assert(handle);
@@ -462,7 +471,8 @@ void destroy(Endpoint *const handle) {
     }
   }
 
-  delete handle;
+  if (!handle->customAlloc)
+    delete handle;
 }
 
 std::string to_string(BLOM_Type const blomType) {

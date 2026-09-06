@@ -85,6 +85,8 @@ bool setTextColor(Object *const object, float const r, float const g,
 
 glm::vec3 getTextSize(Object *const object);
 
+glm::vec3 getTextSize(std::size_t const length);
+
 bool createTexture(VulkanBackend *const handle, Texture **const object);
 
 bool loadFromFile(Texture *const handle, std::string const &path);

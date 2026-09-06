@@ -18,6 +18,8 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include <cstddef>
+
 namespace re {
 /* This communicates with the GPU, manages the window, executes draws, etc... */
 struct VulkanBackend;
@@ -46,4 +48,7 @@ bool createBackend(RenderEngine *const handle, VulkanBackend **const p);
 void enableInfoLogs(RenderEngine *const handle);
 
 void enableWarnings(RenderEngine *const handle);
+
+std::size_t getSizeOfRenderEngine();
+std::size_t getAlignOfRenderEngine();
 } // namespace re

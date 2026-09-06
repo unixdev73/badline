@@ -26,14 +26,19 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 namespace {
 inline constexpr std::size_t getGridWidth() { return 8; }
+inline constexpr std::size_t getGridHeight() { return 15; }
 } // namespace
 
 namespace re {
+glm::vec3 getTextSize(std::size_t const length) {
+  return {length * getGridWidth() - (length ? 1 : 0), getGridHeight(), 0.f};
+}
+
 glm::vec3 getTextSize(Object *const object) {
   assert(object);
   if (!object->count)
     return {};
-  return {object->count * getGridWidth() - 1, 15.f, 0.f};
+  return {object->count * getGridWidth() - 1, getGridHeight(), 0.f};
 }
 
 bool uploadObjectDataToGPU(Object *const handle);

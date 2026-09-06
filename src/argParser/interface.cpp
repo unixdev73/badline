@@ -34,7 +34,10 @@ void create(ArgParser **const handle) {
     return;
 
   CustomUniqPtr<Logs> logs{ptr, [](auto *const p) { destroy(p); }};
-  *handle = new ArgParser{};
+  if (!*handle)
+    *handle = new ArgParser{};
+  else
+    (*handle)->customAlloc = true;
   if (handle)
     (*handle)->logs = std::move(logs);
 }
@@ -51,7 +54,14 @@ bool fillParsingDatabase(ArgParser *const handle) {
   return true;
 }
 
-void destroy(ArgParser *const handle) { delete handle; }
+std::size_t getSizeOfArgParser() { return sizeof(ArgParser); }
+
+std::size_t getAlignOfArgParser() { return alignof(ArgParser); }
+
+void destroy(ArgParser *const handle) {
+  if (handle && !handle->customAlloc)
+    delete handle;
+}
 
 bool addFlag(ArgParser *const handle,
              char const *const argLongFormPtr,
